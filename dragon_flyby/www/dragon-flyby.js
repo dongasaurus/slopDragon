@@ -35,7 +35,7 @@
  *   dragonFlyby.fly("sleigh")     - a specific visitor (see dragonFlyby.characters)
  */
 
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 const DEFAULT_DURATION_S = 5;
 const MAX_DURATION_S = 10;
 const SIZES = { small: 170, medium: 250, large: 350 };
@@ -261,7 +261,13 @@ function blast(d) {
 // Scale a part up around the shoulder joint.
 const grow = (k) => `translate(172 97) scale(${k}) translate(-172 -97)`;
 
-function dragonSvg(d) {
+// A floppy Santa hat for the Christmas dragon, in head coordinates.
+const SANTA_HAT = `
+    <path fill="#d62828" d="M240 70 C235 54 226 44 210 41 C224 34 252 40 265 61 C267 64 268 67 268 70 Z"/>
+    <rect fill="#ffffff" x="236" y="64" width="35" height="9" rx="4.5" transform="rotate(-6 253 68)"/>
+    <circle fill="#ffffff" cx="209" cy="41" r="6"/>`;
+
+function dragonSvg(d, { santaHat = false } = {}) {
   return `
 <svg class="dragon" viewBox="0 -40 320 240" xmlns="http://www.w3.org/2000/svg">
   <g class="wing wing-far"><g transform="${grow(WING_SCALE * 0.95)} translate(-14 -4)">
@@ -287,7 +293,7 @@ function dragonSvg(d) {
     <path fill="${d.body}" d="${NECK_PATH}"/>
     <g fill="${d.head === "ears" ? d.shade : d.accent}">${headGear(d)}</g>
     <path fill="${d.body}" d="${HEAD_PATH}"/>
-    <path fill="${d.shade}" opacity="0.55" d="M242 75 C250 70 262 71 266 77 C258 74 250 74 242 79 Z"/>
+    <path fill="${d.shade}" opacity="0.55" d="M242 75 C250 70 262 71 266 77 C258 74 250 74 242 79 Z"/>${santaHat ? SANTA_HAT : ""}
     <path class="jaw" d="${JAW_PATH}"/>
     <circle fill="${d.shade}" cx="276" cy="84" r="1.6"/>
     <ellipse fill="${d.eye}" cx="254" cy="84" rx="7.5" ry="7"/>
@@ -599,7 +605,49 @@ function floatieSvg() {
   </svg>`;
 }
 
+function snowflake(x, y, s, delay) {
+  return `<g transform="translate(${x} ${y}) scale(${s})"><path class="ln blow" style="stroke:#4fc3f7;stroke-width:1.8;animation-delay:${delay}s" d="M0 -5 L0 5 M-4.3 -2.5 L4.3 2.5 M-4.3 2.5 L4.3 -2.5"/></g>`;
+}
+
+function airconSvg() {
+  const cloud = "stroke:#b0c4d8;stroke-width:1.4";
+  const unit = "stroke:#90a4ae;stroke-width:1.4";
+  return `${svgOpen("aircon", [0, -40, 230, 170])}
+    <path fill="#ffffff" style="${cloud}" d="M20 118 C6 118 4 100 18 98 C16 84 34 78 44 86 C50 72 72 72 78 86 C86 76 104 78 108 90 C116 80 136 82 140 94 C150 84 170 86 172 98 C184 90 202 94 202 106 C216 106 220 122 206 124 L24 124 C18 124 16 120 20 118 Z"/>
+    <path class="ns" fill="#eaf2fb" d="M24 118 L206 118 C204 121 205 123 206 124 L24 124 Z"/>
+    <path class="ln" style="stroke:#8d6e63;stroke-width:3" d="M38 108 L72 52 M60 108 L90 86 M46 92 L98 94"/>
+    <path fill="#42a5f5" d="M58 38 L80 40 C76 58 70 76 66 96 L42 96 C46 76 52 56 58 38 Z"/>
+    <path class="ns" fill="#ffffff" d="M56 46 L78 48 L77 54 L54 52 Z M52 62 L74 64 L72 70 L50 68 Z M47 78 L70 80 L69 86 L45 84 Z"/>
+    <path fill="#d62828" d="M60 90 C56 74 62 62 74 62 C86 62 90 76 88 92 Z"/>
+    <path fill="#f6c7a1" d="M104 84 L126 94 L122 100 L101 92 Z"/>
+    <path fill="#d62828" d="M84 84 L106 82 L108 94 L86 96 Z"/>
+    <path fill="#29b6f6" d="M124 92 L134 98 L131 103 L120 98 Z"/>
+    <path class="ln" style="stroke:#f6c7a1;stroke-width:6" d="M66 74 C58 80 56 86 60 90"/>
+    <path class="ln" style="stroke:#f6c7a1;stroke-width:6" d="M80 72 C88 70 94 66 96 60"/>
+    <circle fill="#f6c7a1" cx="97" cy="57" r="4"/>
+    <path fill="#e1f5fe" d="M92 38 L103 38 L101 55 L94 55 Z"/>
+    <path class="ns" fill="#ef5350" d="M93 43 L102 43 L101 55 L94 55 Z"/>
+    <path class="ln" style="stroke:#ffffff;stroke-width:1.6" d="M99 44 L104 28"/>
+    ${santaHead(72, 48, { sunnies: true })}
+    <path class="ln" style="stroke:#90a4ae;stroke-width:4" d="M184 118 L184 62 M172 120 L196 120"/>
+    <rect fill="#ffffff" style="${unit}" x="140" y="26" width="80" height="36" rx="9"/>
+    <path class="ln" style="stroke:#cfd8dc;stroke-width:1.2" d="M146 34 L190 34"/>
+    <path fill="#eceff1" style="${unit}" d="M144 50 L216 50 L212 60 C210 61 150 61 148 60 Z"/>
+    <path class="ln" style="stroke:#90a4ae;stroke-width:1.2" d="M150 54 L210 54 M152 57 L208 57"/>
+    <rect class="ns" fill="#263238" x="196" y="31" width="18" height="10" rx="2"/>
+    <text x="205" y="39" text-anchor="middle" font-size="8" font-weight="700" fill="#69f0ae">18°</text>
+    <circle class="ns" fill="#69f0ae" cx="190" cy="36" r="1.5"/>
+    <path class="ln blow" style="stroke:#29b6f6;stroke-width:2.4" d="M146 64 C136 68 138 74 128 78 C120 82 122 88 112 90"/>
+    <path class="ln blow" style="stroke:#4fc3f7;stroke-width:2.2;animation-delay:-0.4s" d="M150 68 C140 74 142 80 132 84"/>
+    <path class="ln blow" style="stroke:#29b6f6;stroke-width:2.2;animation-delay:-0.8s" d="M142 58 C132 58 130 64 120 64 C112 64 110 70 102 70"/>
+    ${snowflake(134, 70, 1, 0)}${snowflake(118, 60, 0.8, -0.35)}${snowflake(124, 86, 0.7, -0.7)}${snowflake(108, 76, 0.9, -1.0)}
+    ${speech(10, -40, 124, "Ahhh, bliss!", "#0277bd")}
+  </svg>`;
+}
+
 const AUSSIE_CSS = `${CHRISTMAS_CSS}
+.blow { animation: blow 1.2s linear infinite; }
+@keyframes blow { 0% { opacity: 0; transform: translateX(0); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateX(-34px); } }
 .roo { animation: roo-hop var(--cycle) ease-in-out infinite; }
 .roo-leg { transform-box: fill-box; transform-origin: 30% 10%; animation: roo-kick var(--cycle) ease-in-out infinite; }
 .rider { transform-box: fill-box; transform-origin: 50% 100%; animation: rock calc(var(--cycle) * 2) ease-in-out infinite; }
@@ -886,8 +934,9 @@ const DRAGON_CSS = `
 /* ------------------------------------------------------------------------ */
 // motion: fly | float travel through the air, walk | hop | surf along the bottom.
 // scale: width relative to the size option. vb: the SVG viewBox.
-// weight: how often it is picked within its theme. flip: false keeps
-// front-facing art (and its text) unmirrored when travelling left.
+// theme: one theme or a list of themes. weight: how often it is picked within
+// its theme. flip: false keeps front-facing art (and its text) unmirrored
+// when travelling left.
 
 const dragonActor = (key) => ({
   theme: "dragons", name: DRAGONS[key].name, motion: "fly", bob: "fly",
@@ -908,6 +957,11 @@ const ACTORS = {
     theme: "christmas", name: "Santa's sleigh", motion: "fly", bob: "gentle",
     scale: 2, maxWidth: 0.75, vb: [0, -40, 560, 210], weight: 3, cycle: 0.5, tilt: 10,
     line: "#4a2c17", css: CHRISTMAS_CSS, event: SAY, svg: sleighSvg,
+  },
+  xmasdragon: {
+    ...dragonActor("shadow"), theme: ["christmas", "australianchristmas"],
+    name: "Dragon in a Santa hat", weight: 2,
+    svg: () => dragonSvg(DRAGONS.shadow, { santaHat: true }),
   },
   reindeer: {
     theme: "christmas", name: "Flying reindeer", motion: "fly", bob: "gentle",
@@ -939,6 +993,11 @@ const ACTORS = {
     theme: "australianchristmas", name: "Reindeer keeping cool", motion: "walk",
     scale: 0.62, vb: [0, -34, 124, 112], weight: 2, cycle: 0.5,
     line: "#4a2c17", css: AUSSIE_CSS, svg: coolReindeerSvg,
+  },
+  aircon: {
+    theme: "australianchristmas", name: "Santa cooling off by the air conditioner", motion: "float", bob: "float",
+    scale: 1, vb: [0, -40, 230, 170], weight: 3, cycle: 0.6, tilt: 4, waves: [1, 1.8],
+    line: "#4a2c17", css: AUSSIE_CSS, event: SAY, svg: airconSvg,
   },
   floatie: {
     theme: "australianchristmas", name: "Santa on a pool floatie", motion: "float", bob: "float",
@@ -1106,7 +1165,7 @@ function createFlyby(cfg) {
     if (request && ACTORS[request]) return request;
     const theme = THEMES.includes(request) ? request : activeTheme(cfg);
     if (theme === "dragons" && cfg.dragon !== "random") return cfg.dragon;
-    let cast = Object.keys(ACTORS).filter((k) => ACTORS[k].theme === theme);
+    let cast = Object.keys(ACTORS).filter((k) => [].concat(ACTORS[k].theme).includes(theme));
     if (cast.length > 1) cast = cast.filter((k) => k !== lastKey);
     const total = cast.reduce((sum, k) => sum + ACTORS[k].weight, 0);
     let roll = Math.random() * total;

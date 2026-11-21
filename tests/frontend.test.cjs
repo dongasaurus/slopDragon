@@ -159,8 +159,8 @@ test("fly on load", async () => {
 
 const CAST = {
   dragons: ["shadow", "spike", "ember", "moon"],
-  christmas: ["sleigh", "reindeer", "elf"],
-  australianchristmas: ["kangaroos", "surfing", "cricket", "coolreindeer", "floatie"],
+  christmas: ["sleigh", "reindeer", "elf", "xmasdragon"],
+  australianchristmas: ["kangaroos", "surfing", "cricket", "aircon", "coolreindeer", "floatie", "xmasdragon"],
   halloween: ["witch", "bats", "ghost", "skeleton", "pumpkin"],
   easter: ["bunny", "chick", "butterflies"],
 };
@@ -169,7 +169,7 @@ const character = (page) => page.locator("dragon-flyby-overlay").getAttribute("d
 test("every character renders and is cleaned up", async () => {
   const page = await open("duration=2");
   const all = await page.evaluate(() => window.dragonFlyby.characters);
-  assert.deepEqual([...all].sort(), Object.values(CAST).flat().sort());
+  assert.deepEqual([...all].sort(), [...new Set(Object.values(CAST).flat())].sort());
   for (const key of all) {
     assert.equal(await page.evaluate((k) => window.dragonFlyby.fly(k), key), key);
     assert.equal(await character(page), key);
@@ -259,4 +259,20 @@ test("auto theme uses the Australian Christmas in Australia", async () => {
   page = await open("theme=auto", { time: new Date("2026-10-20T12:00:00").getTime(), timezoneId: "Australia/Sydney" });
   assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), "halloween");
   await page.close();
+});
+
+test("the Santa-hat dragon visits both Christmas themes", async () => {
+  for (const theme of ["christmas", "australianchristmas"]) {
+    const page = await open(`theme=${theme}&interval=1`);
+    let found = false;
+    for (let i = 0; i < 40 && !found; i++) {
+      await page.clock.runFor(60 * 1000);
+      found = (await character(page)) === "xmasdragon";
+    }
+    assert.ok(found, `xmasdragon shows up in ${theme}`);
+    const hat = await page.evaluate(() =>
+      document.querySelector("dragon-flyby-overlay").shadowRoot.querySelector('.head path[fill="#d62828"]') !== null);
+    assert.ok(hat, "and wears its Santa hat");
+    await page.close();
+  }
 });

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0
+
+- Australian Christmas: Santa relaxes in a deckchair in front of an air conditioner, with icy wind and snowflakes ("Ahhh, bliss!").
+- Both Christmas themes: a dragon flies by wearing a Santa hat.
+
 ## 1.3.0
 
 - New `australianchristmas` theme: Santa's sleigh pulled by kangaroos, Santa surfing, Santa running between the wickets, a reindeer keeping cool with a fan, and Santa drifting by on a flamingo pool floatie.

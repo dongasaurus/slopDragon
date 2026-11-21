@@ -31,8 +31,8 @@ After changing options, start the add-on again and refresh your dashboards.
 | Theme | Who shows up |
 | --- | --- |
 | `dragons` | Four original dragons inspired by *How to Train Your Dragon*. |
-| `christmas` | Santa's sleigh and reindeer, a flying reindeer, an elf walking along the bottom with a present. |
-| `australianchristmas` | Santa's sleigh pulled by kangaroos, Santa surfing, Santa playing cricket, a reindeer cooling off with a fan, Santa on a flamingo pool floatie. |
+| `christmas` | Santa's sleigh and reindeer, a flying reindeer, a dragon in a Santa hat, an elf walking along the bottom with a present. |
+| `australianchristmas` | Santa's sleigh pulled by kangaroos, Santa surfing, Santa playing cricket, Santa cooling off in front of the air conditioner, a reindeer with a fan, Santa on a flamingo pool floatie, a dragon in a Santa hat. |
 | `halloween` | A witch on a broomstick, a swarm of bats, a ghost, a skeleton walking and a jack-o'-lantern hopping along the bottom. |
 | `easter` | The Easter bunny hopping with a basket of eggs, a chick waddling, butterflies. |
 | `auto` | Halloween in October, Christmas in December (the Australian one if Home Assistant's country or time zone is Australia), Easter from a week before Easter Sunday to Easter Monday, dragons the rest of the year. |

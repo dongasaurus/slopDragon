@@ -21,8 +21,8 @@ Set the `theme` option to swap the dragons for seasonal visitors. They follow th
 
 | Theme | Who shows up |
 | --- | --- |
-| `christmas` | Santa's sleigh and reindeer fly by ("Ho ho ho!"), a lone reindeer gallops across the sky, an elf walks along the bottom carrying a present. |
-| `australianchristmas` | Christmas in an Aussie summer: Santa's sleigh pulled by hopping kangaroos ("G'day!"), Santa surfing a wave along the bottom, Santa in cricket pads and zinc cream running between the wickets ("Yes! Run!"), a reindeer in sunnies cooling off with a fan, and Santa drifting past on a flamingo pool floatie with a cold drink. |
+| `christmas` | Santa's sleigh and reindeer fly by ("Ho ho ho!"), a lone reindeer gallops across the sky, a dragon flies by in a Santa hat, an elf walks along the bottom carrying a present. |
+| `australianchristmas` | Christmas in an Aussie summer: Santa's sleigh pulled by hopping kangaroos ("G'day!"), Santa surfing a wave along the bottom, Santa in cricket pads and zinc cream running between the wickets ("Yes! Run!"), Santa cooling off in a deckchair in front of the air conditioner ("Ahhh, bliss!"), a reindeer in sunnies cooling off with a fan, Santa drifting past on a flamingo pool floatie with a cold drink, and the dragon in a Santa hat. |
 | `halloween` | A witch on her broomstick (with her cat) and a swarm of bats fly by, a ghost floats past ("BOO!"), a skeleton walks and a jack-o'-lantern hops along the bottom. |
 | `easter` | The Easter bunny hops along the bottom with a basket of eggs, a chick in its eggshell waddles past, butterflies flutter by. |
 | `auto` | Follows the calendar: Halloween all of October, Christmas all of December (the Australian one if Home Assistant is set to Australia), Easter from a week before Easter Sunday to Easter Monday, dragons the rest of the year. |
