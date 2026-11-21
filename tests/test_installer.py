@@ -123,16 +123,18 @@ class InstallerTest(unittest.TestCase):
         self.assertTrue(res["url"].startswith("/local/dragon-flyby/dragon-flyby.js?"))
         self.assertIn("interval=15", res["url"])
         self.assertIn("duration=5", res["url"])
+        self.assertIn("theme=dragons", res["url"])
         self.assertIn("dragon=random", res["url"])
 
     def test_changed_options_update_the_same_resource(self) -> None:
         self.run_with()
         first_id = self.ha.resources[0]["id"]
-        self.run_with(interval_minutes=30, dragon="ember", size="large")
+        self.run_with(interval_minutes=30, theme="christmas", dragon="ember", size="large")
         self.assertEqual(len(self.ha.resources), 1)
         res = self.ha.resources[0]
         self.assertEqual(res["id"], first_id)
         self.assertIn("interval=30", res["url"])
+        self.assertIn("theme=christmas", res["url"])
         self.assertIn("dragon=ember", res["url"])
         self.assertIn("size=large", res["url"])
 

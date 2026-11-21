@@ -39,6 +39,7 @@ DEFAULTS = {
     "enabled": True,
     "interval_minutes": 15,
     "duration_seconds": 5,
+    "theme": "dragons",
     "dragon": "random",
     "size": "medium",
     "dashboards_only": True,
@@ -75,6 +76,7 @@ def resource_url(options: dict, digest: str) -> str:
     query = {
         "interval": options["interval_minutes"],
         "duration": int(duration) if float(duration).is_integer() else duration,
+        "theme": options["theme"],
         "dragon": options["dragon"],
         "size": options["size"],
         "dashboards": int(bool(options["dashboards_only"])),
@@ -210,7 +212,7 @@ def main() -> int:
             action = sync_resource(ha, url)
             log(f"Dashboard resource {action}: {url}")
             log(
-                f"A dragon will fly every {options['interval_minutes']} min "
+                f"Theme '{options['theme']}': a visitor every {options['interval_minutes']} min "
                 f"for {options['duration_seconds']} s. Refresh open dashboards to apply changes."
             )
             if www_is_new:

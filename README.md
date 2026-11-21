@@ -1,6 +1,6 @@
 # Dragon Flyby for Home Assistant
 
-Every 15 minutes a dragon swoops across your Home Assistant dashboard. It stays on screen for 5 seconds (configurable up to 10), flies over everything, and doesn't change anything on the dashboard underneath it.
+Every 15 minutes a dragon swoops across your Home Assistant dashboard. Or, with a holiday theme, Santa's sleigh, a witch, a skeleton or the Easter bunny. It stays on screen for 5 seconds (configurable up to 10), flies over everything, and doesn't change anything on the dashboard underneath it.
 
 ![The four dragons](docs/dragons.png)
 
@@ -12,6 +12,19 @@ The dragons are original artwork inspired by the films *How to Train Your Dragon
 | Spike Tail (`spike`) | Blue, horned crown, spiked tail | White-hot blast |
 | Ember Horn (`ember`) | Red, curved horns, spiny back | Flame |
 | Moon Glider (`moon`) | Pale and glowing, ice-blue eyes | Blue-white plasma |
+
+## Holiday themes
+
+Set the `theme` option to swap the dragons for seasonal visitors. They follow the same interval and duration.
+
+![Holiday visitors](docs/holidays.png)
+
+| Theme | Who shows up |
+| --- | --- |
+| `christmas` | Santa's sleigh and reindeer fly by ("Ho ho ho!"), a lone reindeer gallops across the sky, an elf walks along the bottom carrying a present. |
+| `halloween` | A witch on her broomstick (with her cat) and a swarm of bats fly by, a ghost floats past ("BOO!"), a skeleton walks and a jack-o'-lantern hops along the bottom. |
+| `easter` | The Easter bunny hops along the bottom with a basket of eggs, a chick in its eggshell waddles past, butterflies flutter by. |
+| `auto` | Follows the calendar: Halloween all of October, Christmas all of December, Easter from a week before Easter Sunday to Easter Monday, dragons the rest of the year. |
 
 ## Install
 
@@ -33,7 +46,8 @@ The add-on installs the dragon, then stops. **Seeing "stopped" afterwards is nor
 | `enabled` | `true` | Turn this off and start the add-on again to remove the dragon. |
 | `interval_minutes` | `15` | Minutes between flights (1 to 1440). |
 | `duration_seconds` | `5` | Seconds each flight lasts (1 to 10). |
-| `dragon` | `random` | `random`, `shadow`, `spike`, `ember` or `moon`. |
+| `theme` | `dragons` | `dragons`, `christmas`, `halloween`, `easter` or `auto` (follows the calendar). |
+| `dragon` | `random` | Used by the `dragons` theme: `random`, `shadow`, `spike`, `ember` or `moon`. |
 | `size` | `medium` | `small`, `medium` or `large`. |
 | `dashboards_only` | `true` | Only fly over dashboards, not over Settings or other pages. |
 | `fly_on_load` | `false` | Also send a dragon a few seconds after a dashboard opens. Handy for testing. |
@@ -47,7 +61,11 @@ After changing options, start the add-on again and refresh your dashboards.
 - It skips a flight when the tab is hidden, when you're not on a dashboard (if `dashboards_only` is on), or when the device asks for reduced motion.
 - Each browser has its own timer, so every open dashboard gets its own dragon.
 
-Want a dragon right now? Open your browser's developer console on a dashboard and run `dragonFlyby.fly()` or `dragonFlyby.fly("ember")`.
+Want one right now? Open your browser's developer console on a dashboard and run:
+
+- `dragonFlyby.fly()` for a visitor from the current theme
+- `dragonFlyby.fly("halloween")` for a random visitor from a theme
+- `dragonFlyby.fly("sleigh")` for a specific one (`dragonFlyby.characters` lists them all)
 
 ## Without the add-on store
 
@@ -57,7 +75,7 @@ On Home Assistant Container or Core (no add-ons), install it by hand:
 2. Go to **Settings → Dashboards → ⋮ → Resources → Add resource**.
 3. URL: `/local/dragon-flyby/dragon-flyby.js?interval=15&duration=5`, type **JavaScript module**.
 
-Use the same options in the URL: `interval`, `duration`, `dragon`, `size`, `dashboards` (`1`/`0`) and `onload` (`1`/`0`).
+Use the same options in the URL: `interval`, `duration`, `theme`, `dragon`, `size`, `dashboards` (`1`/`0`) and `onload` (`1`/`0`).
 
 If your resources are managed in YAML:
 
@@ -76,7 +94,7 @@ Preview the dragons without Home Assistant:
 python3 -m http.server 8000
 ```
 
-Then open http://localhost:8000/demo/ and use the buttons.
+Then open http://localhost:8000/demo/ and use the buttons to summon any theme or character.
 
 Run the tests:
 
@@ -92,4 +110,4 @@ The browser tests need Node 18+ and Playwright with Chromium.
 
 ## Credits
 
-Original artwork and code. Inspired by DreamWorks Animation's *How to Train Your Dragon*. This project isn't affiliated with or endorsed by DreamWorks.
+Original artwork and code. The dragons are inspired by DreamWorks Animation's *How to Train Your Dragon*. This project isn't affiliated with or endorsed by DreamWorks.

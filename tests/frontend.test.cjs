@@ -30,15 +30,15 @@ after(async () => {
   server?.close();
 });
 
-async function open(query = "", { clock = true, reducedMotion = "no-preference" } = {}) {
+async function open(query = "", { clock = true, reducedMotion = "no-preference", time = 0 } = {}) {
   const page = await browser.newPage({ viewport: { width: 1024, height: 600 } });
   const errors = [];
   page.on("pageerror", (err) => errors.push(err.message));
   await page.emulateMedia({ reducedMotion });
   if (clock) {
     // Frozen fake clock: time only moves when a test calls runFor().
-    await page.clock.install({ time: 0 });
-    await page.clock.pauseAt(1000);
+    await page.clock.install({ time });
+    await page.clock.pauseAt(new Date(time).getTime() + 1000);
   }
   await page.goto(`${base}${query ? `?${query}` : ""}`);
   await page.evaluate(() => window.loaded);
@@ -155,4 +155,78 @@ test("fly on load", async () => {
   await page.clock.runFor(3000);
   assert.equal(await overlayCount(page), 1);
   await page.close();
+});
+
+const CAST = {
+  dragons: ["shadow", "spike", "ember", "moon"],
+  christmas: ["sleigh", "reindeer", "elf"],
+  halloween: ["witch", "bats", "ghost", "skeleton", "pumpkin"],
+  easter: ["bunny", "chick", "butterflies"],
+};
+const character = (page) => page.locator("dragon-flyby-overlay").getAttribute("data-character");
+
+test("every character renders and is cleaned up", async () => {
+  const page = await open("duration=2");
+  const all = await page.evaluate(() => window.dragonFlyby.characters);
+  assert.deepEqual([...all].sort(), Object.values(CAST).flat().sort());
+  for (const key of all) {
+    assert.equal(await page.evaluate((k) => window.dragonFlyby.fly(k), key), key);
+    assert.equal(await character(page), key);
+    const size = await page.evaluate(() => {
+      const r = document.querySelector("dragon-flyby-overlay").shadowRoot.querySelector("svg").getBoundingClientRect();
+      return r.width * r.height;
+    });
+    assert.ok(size > 1000, `${key} is drawn at a visible size`);
+    await page.clock.runFor(2000);
+    assert.equal(await overlayCount(page), 0, `${key} removed after its flight`);
+  }
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+for (const theme of ["christmas", "halloween", "easter"]) {
+  test(`${theme} theme only sends ${theme} visitors`, async () => {
+    const page = await open(`theme=${theme}&interval=1`);
+    const seen = new Set();
+    for (let i = 0; i < 12; i++) {
+      await page.clock.runFor(60 * 1000);
+      seen.add(await character(page));
+    }
+    for (const key of seen) assert.ok(CAST[theme].includes(key), `${key} belongs to ${theme}`);
+    assert.ok(seen.size >= 2, `more than one ${theme} character shows up`);
+    await page.close();
+  });
+}
+
+test("walkers and hoppers cross along the bottom of the screen", async () => {
+  const page = await open("", { clock: false });
+  for (const key of ["elf", "skeleton", "pumpkin", "bunny", "chick"]) {
+    const bottom = await page.evaluate((k) => {
+      window.dragonFlyby.stop();
+      window.dragonFlyby.fly(k);
+      const flight = document.querySelector("dragon-flyby-overlay").shadowRoot.querySelector(".flight");
+      return flight.getBoundingClientRect().bottom;
+    }, key);
+    assert.ok(Math.abs(bottom - (600 - 4)) < 2, `${key} walks on the bottom edge (bottom=${bottom})`);
+  }
+  await page.close();
+});
+
+test("auto theme follows the calendar", async () => {
+  const cases = [
+    ["2026-10-15T12:00:00", "halloween"],
+    ["2026-12-10T12:00:00", "christmas"],
+    ["2026-07-04T12:00:00", "dragons"],
+    ["2026-03-29T12:00:00", "easter"], // a week before Easter Sunday (5 April 2026)
+    ["2026-04-06T12:00:00", "easter"], // Easter Monday
+    ["2026-04-07T12:00:00", "dragons"],
+    ["2027-03-28T12:00:00", "easter"], // Easter Sunday 2027
+  ];
+  for (const [date, expected] of cases) {
+    const page = await open("theme=auto&interval=1", { time: new Date(date).getTime() });
+    assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), expected, date);
+    await page.clock.runFor(60 * 1000);
+    assert.ok(CAST[expected].includes(await character(page)), `${date} sends a ${expected} visitor`);
+    await page.close();
+  }
 });

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0
+
+- New `theme` option with holiday modes:
+  - `christmas`: Santa's sleigh and reindeer fly by, an elf walks along the bottom with a present.
+  - `halloween`: witches and bats fly by, a ghost floats past, skeletons walk and a jack-o'-lantern hops along the bottom.
+  - `easter`: the Easter bunny hops along the bottom, a chick waddles past, butterflies flutter by.
+  - `auto`: follows the calendar (Halloween in October, Christmas in December, Easter week), dragons the rest of the year.
+
 ## 1.1.0
 
 - `duration_seconds` now goes up to 10 seconds. The default is still 5.
