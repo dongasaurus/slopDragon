@@ -30,8 +30,8 @@ after(async () => {
   server?.close();
 });
 
-async function open(query = "", { clock = true, reducedMotion = "no-preference", time = 0 } = {}) {
-  const page = await browser.newPage({ viewport: { width: 1024, height: 600 } });
+async function open(query = "", { clock = true, reducedMotion = "no-preference", time = 0, timezoneId = "Europe/London" } = {}) {
+  const page = await browser.newPage({ viewport: { width: 1024, height: 600 }, timezoneId });
   const errors = [];
   page.on("pageerror", (err) => errors.push(err.message));
   await page.emulateMedia({ reducedMotion });
@@ -160,6 +160,7 @@ test("fly on load", async () => {
 const CAST = {
   dragons: ["shadow", "spike", "ember", "moon"],
   christmas: ["sleigh", "reindeer", "elf"],
+  australianchristmas: ["kangaroos", "surfing", "cricket", "coolreindeer", "floatie"],
   halloween: ["witch", "bats", "ghost", "skeleton", "pumpkin"],
   easter: ["bunny", "chick", "butterflies"],
 };
@@ -184,7 +185,7 @@ test("every character renders and is cleaned up", async () => {
   await page.close();
 });
 
-for (const theme of ["christmas", "halloween", "easter"]) {
+for (const theme of ["christmas", "australianchristmas", "halloween", "easter"]) {
   test(`${theme} theme only sends ${theme} visitors`, async () => {
     const page = await open(`theme=${theme}&interval=1`);
     const seen = new Set();
@@ -200,7 +201,7 @@ for (const theme of ["christmas", "halloween", "easter"]) {
 
 test("walkers and hoppers cross along the bottom of the screen", async () => {
   const page = await open("", { clock: false });
-  for (const key of ["elf", "skeleton", "pumpkin", "bunny", "chick"]) {
+  for (const key of ["elf", "skeleton", "pumpkin", "bunny", "chick", "surfing", "cricket", "coolreindeer"]) {
     const bottom = await page.evaluate((k) => {
       window.dragonFlyby.stop();
       window.dragonFlyby.fly(k);
@@ -229,4 +230,33 @@ test("auto theme follows the calendar", async () => {
     assert.ok(CAST[expected].includes(await character(page)), `${date} sends a ${expected} visitor`);
     await page.close();
   }
+});
+
+test("auto theme uses the Australian Christmas in Australia", async () => {
+  const december = new Date("2026-12-10T12:00:00").getTime();
+
+  // Home Assistant's country setting wins.
+  let page = await open("theme=auto&interval=1", { time: december });
+  await page.evaluate(() => {
+    const ha = document.createElement("home-assistant");
+    ha.hass = { panels: {}, config: { country: "AU", time_zone: "Europe/London" } };
+    document.body.append(ha);
+  });
+  assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), "australianchristmas");
+  await page.clock.runFor(60 * 1000);
+  assert.ok(CAST.australianchristmas.includes(await character(page)));
+  await page.close();
+
+  // Without Home Assistant settings, the browser's time zone decides.
+  page = await open("theme=auto", { time: december, timezoneId: "Australia/Perth" });
+  assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), "australianchristmas");
+  await page.close();
+
+  // Elsewhere it stays a snowy Christmas, and Halloween is unchanged.
+  page = await open("theme=auto", { time: december, timezoneId: "America/New_York" });
+  assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), "christmas");
+  await page.close();
+  page = await open("theme=auto", { time: new Date("2026-10-20T12:00:00").getTime(), timezoneId: "Australia/Sydney" });
+  assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), "halloween");
+  await page.close();
 });

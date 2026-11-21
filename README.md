@@ -1,6 +1,6 @@
 # Dragon Flyby for Home Assistant
 
-Every 15 minutes a dragon swoops across your Home Assistant dashboard. Or, with a holiday theme, Santa's sleigh, a witch, a skeleton or the Easter bunny. It stays on screen for 5 seconds (configurable up to 10), flies over everything, and doesn't change anything on the dashboard underneath it.
+Every 15 minutes a dragon swoops across your Home Assistant dashboard. Or, with a holiday theme, Santa's sleigh, a surfing Santa, a witch, a skeleton or the Easter bunny. It stays on screen for 5 seconds (configurable up to 10), flies over everything, and doesn't change anything on the dashboard underneath it.
 
 ![The four dragons](docs/dragons.png)
 
@@ -22,9 +22,10 @@ Set the `theme` option to swap the dragons for seasonal visitors. They follow th
 | Theme | Who shows up |
 | --- | --- |
 | `christmas` | Santa's sleigh and reindeer fly by ("Ho ho ho!"), a lone reindeer gallops across the sky, an elf walks along the bottom carrying a present. |
+| `australianchristmas` | Christmas in an Aussie summer: Santa's sleigh pulled by hopping kangaroos ("G'day!"), Santa surfing a wave along the bottom, Santa in cricket pads and zinc cream running between the wickets ("Yes! Run!"), a reindeer in sunnies cooling off with a fan, and Santa drifting past on a flamingo pool floatie with a cold drink. |
 | `halloween` | A witch on her broomstick (with her cat) and a swarm of bats fly by, a ghost floats past ("BOO!"), a skeleton walks and a jack-o'-lantern hops along the bottom. |
 | `easter` | The Easter bunny hops along the bottom with a basket of eggs, a chick in its eggshell waddles past, butterflies flutter by. |
-| `auto` | Follows the calendar: Halloween all of October, Christmas all of December, Easter from a week before Easter Sunday to Easter Monday, dragons the rest of the year. |
+| `auto` | Follows the calendar: Halloween all of October, Christmas all of December (the Australian one if Home Assistant is set to Australia), Easter from a week before Easter Sunday to Easter Monday, dragons the rest of the year. |
 
 ## Install
 
@@ -46,7 +47,7 @@ The add-on installs the dragon, then stops. **Seeing "stopped" afterwards is nor
 | `enabled` | `true` | Turn this off and start the add-on again to remove the dragon. |
 | `interval_minutes` | `15` | Minutes between flights (1 to 1440). |
 | `duration_seconds` | `5` | Seconds each flight lasts (1 to 10). |
-| `theme` | `dragons` | `dragons`, `christmas`, `halloween`, `easter` or `auto` (follows the calendar). |
+| `theme` | `dragons` | `dragons`, `christmas`, `australianchristmas`, `halloween`, `easter` or `auto` (follows the calendar). |
 | `dragon` | `random` | Used by the `dragons` theme: `random`, `shadow`, `spike`, `ember` or `moon`. |
 | `size` | `medium` | `small`, `medium` or `large`. |
 | `dashboards_only` | `true` | Only fly over dashboards, not over Settings or other pages. |

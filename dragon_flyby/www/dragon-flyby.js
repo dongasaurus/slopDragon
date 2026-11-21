@@ -2,7 +2,8 @@
  * Dragon Flyby for Home Assistant
  * --------------------------------
  * Every few minutes something magical crosses your dashboard: a dragon, or
- * in a holiday theme Santa's sleigh, a witch, a skeleton, the Easter bunny...
+ * in a holiday theme Santa's sleigh, a surfing Santa, a witch, a skeleton,
+ * the Easter bunny...
  *
  * Each visitor lives in its own click-through overlay (pointer-events: none,
  * isolated in a shadow root) that is added on top of the page for the flight
@@ -16,14 +17,16 @@
  *
  *   interval    minutes between visits                        (default 15)
  *   duration    seconds on screen, 1 to 10                    (default 5)
- *   theme       dragons | christmas | halloween | easter | auto (default dragons)
+ *   theme       dragons | christmas | australianchristmas | halloween |
+ *               easter | auto                                 (default dragons)
  *   dragon      random | shadow | spike | ember | moon        (default random)
  *   size        small | medium | large                        (default medium)
  *   dashboards  1 = only show on dashboards                   (default 1)
  *   onload      1 = also show a few seconds after load        (default 0)
  *
  * "auto" picks the theme from the date: Halloween in October, Christmas in
- * December, Easter from a week before Easter Sunday to Easter Monday, and
+ * December (the Australian summer Christmas when Home Assistant is set to
+ * Australia), Easter from a week before Easter Sunday to Easter Monday, and
  * dragons the rest of the year.
  *
  * From the browser console:
@@ -32,11 +35,11 @@
  *   dragonFlyby.fly("sleigh")     - a specific visitor (see dragonFlyby.characters)
  */
 
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const DEFAULT_DURATION_S = 5;
 const MAX_DURATION_S = 10;
 const SIZES = { small: 170, medium: 250, large: 350 };
-const THEMES = ["dragons", "christmas", "halloween", "easter"];
+const THEMES = ["dragons", "christmas", "australianchristmas", "halloween", "easter"];
 
 // Wing, tail and head pivots in SVG viewBox units (viewBox 0 -40 320 240).
 const SHOULDER = "172px 97px";
@@ -140,10 +143,25 @@ function easterSunday(year) {
   return new Date(year, month - 1, day);
 }
 
-function seasonFor(date) {
+// Home Assistant's country setting, else its time zone, else the browser's.
+function inAustralia() {
+  const config = document.querySelector("home-assistant")?.hass?.config;
+  if (config?.country) return config.country === "AU";
+  let zone = config?.time_zone;
+  if (!zone) {
+    try {
+      zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (_err) {
+      zone = "";
+    }
+  }
+  return /^Australia\//.test(zone || "");
+}
+
+function seasonFor(date, australia = false) {
   const month = date.getMonth();
   if (month === 9) return "halloween";
-  if (month === 11) return "christmas";
+  if (month === 11) return australia ? "australianchristmas" : "christmas";
   const day = new Date(date.getFullYear(), month, date.getDate());
   const easter = easterSunday(date.getFullYear());
   const from = new Date(easter.getFullYear(), easter.getMonth(), easter.getDate() - 7);
@@ -312,9 +330,9 @@ function speech(x, y, width, text, color) {
 
 /* ---- Christmas ---------------------------------------------------------- */
 
-function reindeer(x, y, phase = 0) {
+function reindeer(x, y, phase = 0, gait = "gallop") {
   const leg = (fill, d, offset) =>
-    `<g class="leg gallop" style="${delayed(phase + offset)}"><path fill="${fill}" d="${d}"/></g>`;
+    `<g class="leg ${gait}" style="${delayed(phase + offset)}"><path fill="${fill}" d="${d}"/></g>`;
   return `<g transform="translate(${x} ${y})">
     ${leg("#6b4325", "M23 44 L18 64 L22 66 L30 46 Z", 0.5)}
     ${leg("#6b4325", "M56 44 L56 65 L61 65 L63 44 Z", 0.08)}
@@ -335,12 +353,8 @@ function reindeer(x, y, phase = 0) {
   </g>`;
 }
 
-function sleighSvg() {
-  return `${svgOpen("sleigh", [0, -40, 560, 210])}
-    ${sparkle(4, 128, 0.7, "#ffe082", 0)}${sparkle(-14, 104, 0.5, "#ffffff", 0.3)}
-    ${sparkle(20, 156, 0.45, "#ffe082", 0.55)}${sparkle(-28, 140, 0.6, "#ffffff", 0.15)}
-    <path class="ln" style="stroke:#5d3a1e;stroke-width:2" d="M182 100 C250 104 340 92 476 64"/>
-    ${reindeer(222, 46, 0)}${reindeer(312, 36, 0.15)}${reindeer(402, 26, 0.3)}
+// Santa's sleigh is shared by the snowy and the Australian Christmas.
+const SLEIGH_BACK = `
     <path fill="#8b5a2b" d="M30 92 C22 62 34 34 58 30 C82 28 96 50 92 92 Z"/>
     <g transform="rotate(-12 50 30)"><rect fill="#2e7d32" x="40" y="20" width="20" height="16" rx="2"/>
       <path class="ns" fill="#f4c542" d="M48 20 L52 20 L52 36 L48 36 Z"/></g>
@@ -352,7 +366,25 @@ function sleighSvg() {
     <path fill="#d62828" d="M94 96 C92 70 102 56 118 56 C134 56 142 70 140 96 Z"/>
     <path class="ns" fill="#ffffff" d="M126 58 L132 59 L135 96 L129 96 Z"/>
     <rect fill="#262626" x="95" y="80" width="45" height="7"/>
-    <rect fill="#f4c542" x="118" y="79" width="9" height="9" rx="1.5"/>
+    <rect fill="#f4c542" x="118" y="79" width="9" height="9" rx="1.5"/>`;
+
+const SLEIGH_FRONT = (reinsTo) => `
+    <path fill="#d62828" d="M126 64 C138 62 150 64 157 69 L154 77 C146 73 138 72 130 74 Z"/>
+    <circle fill="#262626" cx="158" cy="73" r="5.5"/>
+    <path class="ln" style="stroke:#5d3a1e;stroke-width:1.8" d="M161 73 C230 70 320 68 ${reinsTo}"/>
+    <path fill="#c1272d" d="M16 70 C16 63 23 61 29 65 L40 90 L150 90 C160 90 166 84 168 74 C170 63 179 58 187 62 C194 66 192 75 185 77 C179 79 176 73 181 71 C175 73 175 81 173 92 C171 113 160 128 140 130 L44 130 C28 130 18 120 18 104 Z"/>
+    <path class="ln" style="stroke:#f4c542;stroke-width:3" d="M23 104 L170 104"/>
+    <path class="ln" style="stroke:#f4c542;stroke-width:2.5" d="M58 117 C62 110 73 110 75 116 C77 122 69 124 67 119 M120 117 C124 110 135 110 137 116 C139 122 131 124 129 119"/>
+    <path class="ln" style="stroke:#e0b13d;stroke-width:3.5" d="M52 130 L48 148 M136 130 L140 148"/>
+    <path class="ln" style="stroke:#e0b13d;stroke-width:4.5" d="M8 148 L176 148 C192 148 200 138 197 128 C195 120 186 118 183 125"/>`;
+
+function sleighSvg() {
+  return `${svgOpen("sleigh", [0, -40, 560, 210])}
+    ${sparkle(4, 128, 0.7, "#ffe082", 0)}${sparkle(-14, 104, 0.5, "#ffffff", 0.3)}
+    ${sparkle(20, 156, 0.45, "#ffe082", 0.55)}${sparkle(-28, 140, 0.6, "#ffffff", 0.15)}
+    <path class="ln" style="stroke:#5d3a1e;stroke-width:2" d="M182 100 C250 104 340 92 476 64"/>
+    ${reindeer(222, 46, 0)}${reindeer(312, 36, 0.15)}${reindeer(402, 26, 0.3)}
+    ${SLEIGH_BACK}
     <circle fill="#f6c7a1" cx="120" cy="44" r="12"/>
     <path fill="#ffffff" d="M107 44 C104 58 112 69 121 69 C130 69 137 58 133 44 C128 52 112 52 107 44 Z"/>
     <path class="ns" fill="#ffffff" d="M114 51 C118 47 123 47 128 51 C123 54 118 54 114 51 Z"/>
@@ -362,14 +394,7 @@ function sleighSvg() {
     <path fill="#d62828" d="M107 37 C104 24 96 18 86 20 C96 12 118 12 129 22 C132 26 133 31 132 37 Z"/>
     <rect fill="#ffffff" x="105" y="33" width="30" height="8" rx="4"/>
     <circle fill="#ffffff" cx="86" cy="21" r="5"/>
-    <path fill="#d62828" d="M126 64 C138 62 150 64 157 69 L154 77 C146 73 138 72 130 74 Z"/>
-    <circle fill="#262626" cx="158" cy="73" r="5.5"/>
-    <path class="ln" style="stroke:#5d3a1e;stroke-width:1.8" d="M161 73 C230 70 320 68 468 64"/>
-    <path fill="#c1272d" d="M16 70 C16 63 23 61 29 65 L40 90 L150 90 C160 90 166 84 168 74 C170 63 179 58 187 62 C194 66 192 75 185 77 C179 79 176 73 181 71 C175 73 175 81 173 92 C171 113 160 128 140 130 L44 130 C28 130 18 120 18 104 Z"/>
-    <path class="ln" style="stroke:#f4c542;stroke-width:3" d="M23 104 L170 104"/>
-    <path class="ln" style="stroke:#f4c542;stroke-width:2.5" d="M58 117 C62 110 73 110 75 116 C77 122 69 124 67 119 M120 117 C124 110 135 110 137 116 C139 122 131 124 129 119"/>
-    <path class="ln" style="stroke:#e0b13d;stroke-width:3.5" d="M52 130 L48 148 M136 130 L140 148"/>
-    <path class="ln" style="stroke:#e0b13d;stroke-width:4.5" d="M8 148 L176 148 C192 148 200 138 197 128 C195 120 186 118 183 125"/>
+    ${SLEIGH_FRONT("468 64")}
     ${speech(66, -40, 118, "Ho ho ho!", "#c62828")}
   </svg>`;
 }
@@ -419,6 +444,175 @@ const CHRISTMAS_CSS = `
 .wave { transform-box: fill-box; transform-origin: 90% 95%; animation: wave calc(var(--cycle) * 1.4) ease-in-out infinite; }
 .carry { transform-box: fill-box; transform-origin: 0 50%; animation: swing-tiny var(--cycle) ease-in-out infinite; }
 @keyframes wave { 0%, 100% { transform: rotate(-18deg); } 50% { transform: rotate(16deg); } }
+`;
+
+/* ---- Australian Christmas ----------------------------------------------- */
+
+// Santa's head on its own, for the summer outfits. Centred on the face.
+function santaHead(x, y, { sunnies = false, zinc = false } = {}) {
+  const eyes = sunnies
+    ? `<path fill="#1a1a1a" d="M-3 -7 L13 -7 L12 -2 C10 0 7 -0.5 6 -3 C5 -0.5 2 0 0 -2 Z"/>
+       <path class="ln" style="stroke:#1a1a1a;stroke-width:1.4" d="M-3 -6 L-11 -4"/>
+       <path class="ln" style="stroke:#90caf9;stroke-width:1" d="M1 -5.5 L4 -5.5 M8 -5.5 L11 -5.5"/>`
+    : `<circle class="ns" fill="#262626" cx="4" cy="-4" r="1.6"/>`;
+  const nose = zinc
+    ? `<circle fill="#ffffff" cx="7" cy="3" r="2.9"/><path class="ns" fill="#ffffff" d="M9 -1 L13 0 L13 2 L9 1 Z"/>`
+    : `<circle fill="#e8998d" cx="7" cy="3" r="2.6"/>`;
+  return `<g transform="translate(${x} ${y})">
+    <circle fill="#f6c7a1" cx="0" cy="0" r="12"/>
+    <path fill="#ffffff" d="M-13 0 C-16 14 -8 25 1 25 C10 25 17 14 13 0 C8 8 -8 8 -13 0 Z"/>
+    <path class="ns" fill="#ffffff" d="M-6 7 C-2 3 3 3 8 7 C3 10 -2 10 -6 7 Z"/>
+    <circle class="ns" fill="#f19a8a" opacity="0.7" cx="9" cy="2" r="2.6"/>
+    ${nose}${eyes}
+    <path fill="#d62828" d="M-13 -7 C-16 -20 -24 -26 -34 -24 C-24 -32 -2 -32 9 -22 C12 -18 13 -13 12 -7 Z"/>
+    <rect fill="#ffffff" x="-15" y="-11" width="30" height="8" rx="4"/>
+    <circle fill="#ffffff" cx="-34" cy="-23" r="5"/>
+  </g>`;
+}
+
+function kangaroo(x, y, phase = 0, hat = false) {
+  const d = delayed(phase);
+  return `<g transform="translate(${x} ${y})"><g class="roo" style="${d}">
+    <path fill="#b8763d" d="M26 46 C14 50 2 60 -8 70 C6 66 18 60 30 56 Z"/>
+    <path fill="#c8874a" d="M24 48 C22 34 34 22 50 20 C62 19 70 26 68 38 C66 50 54 58 40 58 C31 58 25 55 24 48 Z"/>
+    <path class="ns" fill="#eac08a" d="M46 38 C56 40 63 46 61 54 C55 58 47 58 41 56 C47 52 50 45 46 38 Z"/>
+    <path fill="#b8763d" d="M67 11 C63 1 63 -6 67 -8 C71 -4 71 4 71 11 Z"/>
+    <path fill="#c8874a" d="M56 26 C58 15 66 8 75 8 C83 8 89 12 92 16 C90 20 84 22 78 22 C72 23 67 27 64 32 Z"/>
+    <path fill="#c8874a" d="M73 9 C71 -1 73 -7 77 -8 C80 -3 78 4 76 10 Z"/>
+    <circle fill="#3a2418" cx="91.5" cy="15" r="2"/>
+    <circle class="ns" fill="#1b120c" cx="79" cy="12" r="1.6"/>
+    <path class="ln" style="stroke:#b8763d;stroke-width:3.5" d="M60 36 C66 40 69 44 70 49"/>
+    <path class="ln" style="stroke:#c62828;stroke-width:4" d="M58 28 C61 32 65 34 69 33"/>
+    <circle fill="#f4c542" cx="65" cy="35" r="2.4"/>
+    ${hat ? `<path fill="#d62828" d="M70 8 C70 -2 78 -8 87 -5 C83 -3 80 2 81 8 Z"/>
+      <rect fill="#ffffff" x="68" y="6" width="15" height="5" rx="2.5"/><circle fill="#ffffff" cx="88" cy="-5" r="3"/>` : ""}
+    <g class="roo-leg" style="${d}">
+      <path fill="#b8763d" d="M30 44 C24 54 28 64 40 66 C46 60 47 52 43 45 Z"/>
+      <path fill="#b8763d" d="M35 63 L62 69 C65 71 63 74 58 74 L33 70 Z"/>
+    </g>
+  </g></g>`;
+}
+
+function kangaroosSvg() {
+  return `${svgOpen("kangaroos", [0, -40, 560, 210])}
+    ${sparkle(4, 128, 0.7, "#ffe082", 0)}${sparkle(-14, 104, 0.5, "#ffffff", 0.3)}
+    ${sparkle(20, 156, 0.45, "#ffe082", 0.55)}
+    <path class="ln" style="stroke:#5d3a1e;stroke-width:2" d="M182 100 C250 104 340 94 470 70"/>
+    ${kangaroo(226, 50, 0)}${kangaroo(318, 40, 0.33)}${kangaroo(410, 30, 0.66, true)}
+    ${SLEIGH_BACK}
+    ${santaHead(120, 44, { sunnies: true })}
+    ${SLEIGH_FRONT("470 62")}
+    ${speech(72, -40, 96, "G'day!", "#00843d")}
+  </svg>`;
+}
+
+function surfingSvg() {
+  return `${svgOpen("surfing", [0, -10, 200, 180])}
+    <path class="ns" fill="#4fc3f7" d="M0 170 L0 128 C28 112 58 108 88 114 C126 122 156 108 174 88 C186 74 198 76 196 90 C194 104 180 116 170 126 C190 124 200 134 200 146 L200 170 Z"/>
+    <path class="ns" fill="#81d4fa" d="M174 88 C180 82 190 80 192 88 C188 96 180 102 172 104 C176 98 178 94 174 88 Z"/>
+    <path class="ns" fill="#0288d1" d="M0 170 L0 150 C40 142 80 146 120 150 C150 152 180 146 200 150 L200 170 Z"/>
+    <path class="ln foam" style="stroke:#ffffff;stroke-width:4" d="M84 114 C122 122 154 108 172 88 C182 76 194 76 194 86"/>
+    <path class="ln foam" style="stroke:#e1f5fe;stroke-width:2.5" d="M10 146 C30 140 50 142 70 146 M120 148 C140 144 160 144 180 148"/>
+    ${sparkle(198, 74, 0.5, "#ffffff", 0)}${sparkle(186, 62, 0.35, "#ffffff", 0.4)}
+    <g class="rider">
+      <path fill="#ffca28" d="M38 128 C70 118 140 112 178 116 C186 117 186 123 178 124 C140 130 80 134 46 136 C36 136 32 131 38 128 Z"/>
+      <path class="ns" fill="#e53935" d="M60 128 C90 122 140 118 170 119 L170 121.5 C140 122 92 126 62 131 Z"/>
+      <path fill="#f6c7a1" d="M92 96 L98 98 L86 124 L79 122 Z"/>
+      <path fill="#f6c7a1" d="M108 96 L114 94 L127 118 L121 121 Z"/>
+      <path fill="#d62828" d="M88 86 C84 70 88 54 102 52 C116 50 124 64 118 86 Z"/>
+      <path class="ns" fill="#ffffff" d="M95 54 C99 58 105 58 109 53 L111 55 C106 61 99 61 93 56 Z"/>
+      <path fill="#d62828" d="M86 84 L118 84 L120 100 L106 102 L102 94 L98 102 L84 100 Z"/>
+      <path class="ns" fill="#ffffff" d="M86 84 L118 84 L118 88 L86 88 Z"/>
+      <circle class="ns" fill="#ffeb3b" cx="92" cy="95" r="2"/><circle class="ns" fill="#ffeb3b" cx="113" cy="94" r="2"/>
+      <path class="ln" style="stroke:#f6c7a1;stroke-width:7" d="M92 62 C80 60 70 54 62 48"/>
+      <circle fill="#f6c7a1" cx="60" cy="47" r="4.5"/>
+      <path class="ln" style="stroke:#f6c7a1;stroke-width:7" d="M112 62 C124 64 136 60 146 52"/>
+      <circle fill="#f6c7a1" cx="148" cy="51" r="4.5"/>
+      ${santaHead(104, 38, { sunnies: true })}
+    </g>
+  </svg>`;
+}
+
+function cricketSvg() {
+  const leg = (x, offset) => `<g class="leg swing" style="${delayed(offset)}">
+      <path fill="#ffffff" d="M${x} 102 L${x + 12} 102 L${x + 12} 134 L${x} 134 Z"/>
+      <path class="ln" style="stroke:#cfd8dc;stroke-width:1.2" d="M${x + 4} 105 L${x + 4} 131 M${x + 8} 105 L${x + 8} 131"/>
+      <path fill="#ffffff" d="M${x - 2} 132 L${x + 14} 132 C${x + 20} 132 ${x + 22} 136 ${x + 20} 140 L${x - 2} 140 Z"/>
+    </g>`;
+  return `${svgOpen("cricket", [0, -40, 130, 200])}
+    ${leg(40, 0.5)}
+    <path fill="#d62828" d="M34 104 C32 80 40 64 54 64 C68 64 76 80 74 104 Z"/>
+    <path class="ns" fill="#ffffff" d="M34 99 L74 99 L74 105 L34 105 Z"/>
+    <rect fill="#262626" x="35" y="86" width="39" height="6"/>
+    <rect fill="#f4c542" x="51" y="85" width="8" height="8" rx="1.5"/>
+    ${leg(54, 0)}
+    ${santaHead(58, 50, { zinc: true })}
+    <g class="carry">
+      <path fill="#e8c58a" d="M76 70 L85 66 L108 114 L99 118 Z"/>
+      <path class="ln" style="stroke:#c9a265;stroke-width:1" d="M82 72 L102 114"/>
+      <path fill="#37474f" d="M68 57 L74 54 L81 68 L75 71 Z"/>
+      <path fill="#d62828" d="M46 70 C55 72 63 70 69 63 L74 70 C66 77 57 81 46 79 Z"/>
+      <circle fill="#ffffff" cx="71" cy="62" r="5"/><circle fill="#ffffff" cx="76" cy="69" r="5"/>
+    </g>
+    ${speech(52, -40, 96, "Yes! Run!", "#00843d")}
+  </svg>`;
+}
+
+function coolReindeerSvg() {
+  return `${svgOpen("coolreindeer", [0, -34, 124, 112])}
+    ${reindeer(4, 4, 0, "swing-small")}
+    <g transform="translate(4 4)">
+      <path fill="#1a1a1a" d="M74 7 L86 7 L85 12 C83 14 80 13 79 11 C78 13 76 13 75 11 Z"/>
+      <path class="ln" style="stroke:#1a1a1a;stroke-width:1.3" d="M74 8 L69 9"/>
+      <circle fill="#ffffff" cx="90.5" cy="14.5" r="2.6"/>
+      <path class="ln" style="stroke:#78909c;stroke-width:2.2" d="M76 4 C82 -6 92 -12 100 -14"/>
+      <circle fill="#eceff1" cx="106" cy="-18" r="10"/>
+      <g class="spin"><path class="ns" fill="#4fc3f7" d="M106 -18 C102 -26 106 -28 108 -26 Z M106 -18 C114 -20 114 -16 112 -14 Z M106 -18 C102 -12 100 -14 100 -16 Z"/></g>
+      <circle class="ns" fill="#78909c" cx="106" cy="-18" r="2"/>
+      <path class="ln breeze" style="stroke:#81d4fa;stroke-width:1.6" d="M96 -12 C92 -10 94 -6 90 -4 M98 -6 C94 -3 96 0 92 2"/>
+      <path class="ns drip" fill="#4fc3f7" d="M66 16 C64 20 66 22 68 22 C70 22 71 20 68 16 Z"/>
+      <path class="ns drip" style="animation-delay:-0.45s" fill="#4fc3f7" d="M60 22 C58 26 60 28 62 28 C64 28 65 26 62 22 Z"/>
+    </g>
+  </svg>`;
+}
+
+function floatieSvg() {
+  return `${svgOpen("floatie", [0, -10, 190, 130])}
+    <ellipse fill="#f06292" cx="95" cy="96" rx="72" ry="20"/>
+    <ellipse class="ns" fill="#c2185b" cx="95" cy="92" rx="44" ry="9"/>
+    <path fill="#f06292" d="M150 94 C166 78 164 52 154 40 C148 32 152 20 162 22 C170 24 172 32 166 37 C164 39 160 39 159 37 C166 52 172 76 164 98 Z"/>
+    <path fill="#212121" d="M168 27 L178 32 L169 36 Z"/>
+    <circle class="ns" fill="#212121" cx="162" cy="28" r="1.7"/>
+    <path fill="#d62828" d="M60 90 C52 74 58 60 72 58 C88 56 100 68 104 90 Z"/>
+    <path fill="#f6c7a1" d="M112 78 L136 66 L140 73 L117 86 Z"/>
+    <path fill="#d62828" d="M96 80 L117 73 L121 84 L102 92 Z"/>
+    <path fill="#29b6f6" d="M135 61 L148 59 L150 66 L138 70 Z"/>
+    <path class="ln" style="stroke:#f6c7a1;stroke-width:6" d="M80 66 C86 58 89 52 91 45"/>
+    <circle fill="#f6c7a1" cx="92" cy="43" r="4"/>
+    <path fill="#e1f5fe" d="M86 22 L98 22 L95 41 L89 41 Z"/>
+    <path class="ns" fill="#ffb74d" d="M87 28 L97 28 L95 41 L89 41 Z"/>
+    <path class="ln" style="stroke:#e53935;stroke-width:1.8" d="M93 30 L99 12"/>
+    <path fill="#ab47bc" d="M86 17 C90 9 101 9 105 15 Z"/>
+    ${santaHead(66, 48, { sunnies: true })}
+    <path fill="#f06292" d="M23 94 C24 106 56 116 95 116 C134 116 166 106 167 94 C156 102 128 106 95 106 C62 106 34 102 23 94 Z"/>
+    <path class="ns" fill="#ffffff" opacity="0.85" d="M44 103 L54 106 L52 113 L42 109 Z M90 106 L100 106 L100 116 L90 116 Z M136 106 L146 103 L148 109 L138 113 Z"/>
+  </svg>`;
+}
+
+const AUSSIE_CSS = `${CHRISTMAS_CSS}
+.roo { animation: roo-hop var(--cycle) ease-in-out infinite; }
+.roo-leg { transform-box: fill-box; transform-origin: 30% 10%; animation: roo-kick var(--cycle) ease-in-out infinite; }
+.rider { transform-box: fill-box; transform-origin: 50% 100%; animation: rock calc(var(--cycle) * 2) ease-in-out infinite; }
+.foam { animation: flicker 0.6s ease-in-out infinite; }
+.spin { transform-box: fill-box; transform-origin: center; animation: spin 0.25s linear infinite; }
+.breeze { animation: breeze 0.6s linear infinite; }
+.drip { animation: drip 0.9s ease-in infinite; }
+@keyframes roo-hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+@keyframes roo-kick { 0%, 100% { transform: rotate(6deg); } 50% { transform: rotate(-22deg); } }
+@keyframes rock { 0%, 100% { transform: rotate(-3deg) translateY(1px); } 50% { transform: rotate(3deg) translateY(-3px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breeze { 0% { opacity: 0; transform: translateX(4px); } 40% { opacity: 0.9; } 100% { opacity: 0; transform: translateX(-8px); } }
+@keyframes drip { 0% { opacity: 0; transform: translateY(-2px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(10px); } }
 `;
 
 /* ---- Halloween ---------------------------------------------------------- */
@@ -690,7 +884,7 @@ const DRAGON_CSS = `
 /* ------------------------------------------------------------------------ */
 /* Cast                                                                     */
 /* ------------------------------------------------------------------------ */
-// motion: fly | float travel through the air, walk | hop along the bottom.
+// motion: fly | float travel through the air, walk | hop | surf along the bottom.
 // scale: width relative to the size option. vb: the SVG viewBox.
 // weight: how often it is picked within its theme. flip: false keeps
 // front-facing art (and its text) unmirrored when travelling left.
@@ -724,6 +918,32 @@ const ACTORS = {
     theme: "christmas", name: "Elf with a present", motion: "walk",
     scale: 0.4, vb: [0, 0, 110, 150], weight: 2, cycle: 0.34,
     line: "#3b2a20", css: CHRISTMAS_CSS, svg: elfSvg,
+  },
+
+  kangaroos: {
+    theme: "australianchristmas", name: "Santa's kangaroo sleigh", motion: "fly", bob: "gentle",
+    scale: 2, maxWidth: 0.75, vb: [0, -40, 560, 210], weight: 3, cycle: 0.5, tilt: 10,
+    line: "#4a2c17", css: AUSSIE_CSS, event: SAY, svg: kangaroosSvg,
+  },
+  surfing: {
+    theme: "australianchristmas", name: "Surfing Santa", motion: "surf", bob: "none",
+    scale: 0.85, vb: [0, -10, 200, 180], weight: 3, cycle: 0.5,
+    line: "#4a2c17", css: AUSSIE_CSS, svg: surfingSvg,
+  },
+  cricket: {
+    theme: "australianchristmas", name: "Santa playing cricket", motion: "walk",
+    scale: 0.5, vb: [0, -40, 130, 184], weight: 2, cycle: 0.3,
+    line: "#3b2a20", css: AUSSIE_CSS, event: SAY, svg: cricketSvg,
+  },
+  coolreindeer: {
+    theme: "australianchristmas", name: "Reindeer keeping cool", motion: "walk",
+    scale: 0.62, vb: [0, -34, 124, 112], weight: 2, cycle: 0.5,
+    line: "#4a2c17", css: AUSSIE_CSS, svg: coolReindeerSvg,
+  },
+  floatie: {
+    theme: "australianchristmas", name: "Santa on a pool floatie", motion: "float", bob: "float",
+    scale: 0.85, vb: [0, -10, 190, 130], weight: 2, cycle: 0.6, tilt: 5, waves: [1.2, 2],
+    line: "#4a2c17", css: AUSSIE_CSS, svg: floatieSvg,
   },
 
   witch: {
@@ -874,7 +1094,7 @@ function groundPath(vw, vh, w, h, ltr) {
 }
 
 function activeTheme(cfg, now = new Date()) {
-  return cfg.theme === "auto" ? seasonFor(now) : cfg.theme;
+  return cfg.theme === "auto" ? seasonFor(now, inAustralia()) : cfg.theme;
 }
 
 function createFlyby(cfg) {
@@ -910,11 +1130,13 @@ function createFlyby(cfg) {
     const h = Math.round((w * vbH) / vbW);
     const ltr = Math.random() < 0.5;
     const mirror = !ltr && actor.flip !== false;
-    const onGround = actor.motion === "walk" || actor.motion === "hop";
+    const onGround = ["walk", "hop", "surf"].includes(actor.motion);
     const durationMs = Math.round(cfg.duration * 1000);
     let cycle = actor.cycle * (cfg.size === "large" ? 1.15 : 1);
     // Slower crossings get slower steps so feet don't skate.
-    if (onGround) cycle *= clamp(cfg.duration / DEFAULT_DURATION_S, 0.75, 1.6);
+    if (actor.motion === "walk" || actor.motion === "hop") {
+      cycle *= clamp(cfg.duration / DEFAULT_DURATION_S, 0.75, 1.6);
+    }
     const bob = actor.bob || (onGround ? actor.motion : "fly");
     const event = actor.event || SAY;
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+
+- New `australianchristmas` theme: Santa's sleigh pulled by kangaroos, Santa surfing, Santa running between the wickets, a reindeer keeping cool with a fan, and Santa drifting by on a flamingo pool floatie.
+- `auto` uses the Australian Christmas in December when Home Assistant's country (or time zone) is Australia.
+
 ## 1.2.0
 
 - New `theme` option with holiday modes:
