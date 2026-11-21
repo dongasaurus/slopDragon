@@ -28,6 +28,12 @@ Set the `theme` option to swap the dragons for seasonal or Minecraft visitors. T
 | `minecraft` | Blocky pixel-art visitors walking along the bottom: Steve with a diamond pickaxe, a creeper that flashes and hisses ("Sssss...", it never explodes), an enderman carrying a grass block that teleports mid-walk, a skeleton archer that fires an arrow, and Denis the dog ("Woof!"). Not part of `auto`. |
 | `auto` | Follows the calendar: Halloween all of October, Christmas all of December (the Australian one if Home Assistant is set to Australia), Easter from a week before Easter Sunday to Easter Monday, dragons the rest of the year. |
 
+## The unicorn
+
+![The unicorn](docs/unicorn.png)
+
+Whatever the theme, every visit has a small chance (5% by default) of being a unicorn instead, galloping across the sky with a rainbow trail. Set `unicorn_chance` between `0` (never) and `25`.
+
 ## Install
 
 [![Add this repository to your Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fdongasaurus%2FslopDragon)
@@ -45,14 +51,15 @@ The add-on installs the dragon, then stops. **Seeing "stopped" afterwards is nor
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| `enabled` | `true` | Turn this off and start the add-on again to remove the dragon. |
-| `interval_minutes` | `15` | Minutes between flights (1 to 1440). |
-| `duration_seconds` | `5` | Seconds each flight lasts (1 to 10). |
+| `enabled` | `true` | Turn this off and start the add-on again to remove the visitors. |
+| `interval_minutes` | `15` | Minutes between visits (1 to 1440). |
+| `duration_seconds` | `5` | Seconds each visit lasts (1 to 10). |
 | `theme` | `dragons` | `dragons`, `christmas`, `australianchristmas`, `halloween`, `easter`, `minecraft` or `auto` (follows the calendar). |
-| `dragon` | `random` | Used by the `dragons` theme: `random`, `shadow`, `spike`, `ember` or `moon`. |
-| `size` | `medium` | `small`, `medium` or `large`. |
-| `dashboards_only` | `true` | Only fly over dashboards, not over Settings or other pages. |
-| `fly_on_load` | `false` | Also send a dragon a few seconds after a dashboard opens. Handy for testing. |
+| `unicorn_chance` | `5` | Percent chance (0 to 25) that a unicorn flies by instead of the usual visitor, in every theme. `0` turns it off. |
+| `dragon` | `random` | Optional, hidden under **Show unused optional configuration options**. Picks one dragon for the `dragons` theme (and `auto` outside the holidays): `random`, `shadow`, `spike`, `ember` or `moon`. |
+| `size` | `medium` | `small`, `medium`, `large` or `extralarge`. |
+| `dashboards_only` | `true` | Only show visitors on dashboards, not on Settings or other pages. |
+| `fly_on_load` | `false` | Also send a visitor a few seconds after a dashboard opens. Handy for testing. |
 
 After changing options, start the add-on again and refresh your dashboards.
 

@@ -15,14 +15,15 @@ If the log says the `www` folder was just created, restart Home Assistant once, 
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| `enabled` | `true` | Turn this off and start the add-on again to remove the dragon. |
-| `interval_minutes` | `15` | Minutes between flights (1 to 1440). |
-| `duration_seconds` | `5` | Seconds each flight lasts (1 to 10). |
+| `enabled` | `true` | Turn this off and start the add-on again to remove the visitors. |
+| `interval_minutes` | `15` | Minutes between visits (1 to 1440). |
+| `duration_seconds` | `5` | Seconds each visit lasts (1 to 10). |
 | `theme` | `dragons` | `dragons`, `christmas`, `australianchristmas`, `halloween`, `easter`, `minecraft` or `auto`. See below. |
-| `dragon` | `random` | Used by the `dragons` theme: `random`, `shadow` (Shadow Wing), `spike` (Spike Tail), `ember` (Ember Horn) or `moon` (Moon Glider). |
-| `size` | `medium` | `small`, `medium` or `large`. |
-| `dashboards_only` | `true` | Only fly over dashboards, not over Settings or other pages. |
-| `fly_on_load` | `false` | Also send a dragon a few seconds after a dashboard opens. |
+| `unicorn_chance` | `5` | Percent chance (0 to 25) that a unicorn flies by instead of the usual visitor, in every theme. `0` turns it off. |
+| `dragon` | `random` | Optional, hidden under **Show unused optional configuration options**. Picks one dragon for the `dragons` theme (and `auto` outside the holidays): `random`, `shadow` (Shadow Wing), `spike` (Spike Tail), `ember` (Ember Horn) or `moon` (Moon Glider). |
+| `size` | `medium` | `small`, `medium`, `large` or `extralarge`. |
+| `dashboards_only` | `true` | Only show visitors on dashboards, not on Settings or other pages. |
+| `fly_on_load` | `false` | Also send a visitor a few seconds after a dashboard opens. |
 
 After changing options, start the add-on again and refresh your dashboards.
 
@@ -37,6 +38,11 @@ After changing options, start the add-on again and refresh your dashboards.
 | `easter` | The Easter bunny hopping with a basket of eggs, a chick waddling, butterflies. |
 | `minecraft` | Blocky pixel art walking along the bottom: Steve with a pickaxe, a creeper that flashes and hisses, an enderman carrying a block, a skeleton archer, Denis the dog. |
 | `auto` | Halloween in October, Christmas in December (the Australian one if Home Assistant's country or time zone is Australia), Easter from a week before Easter Sunday to Easter Monday, dragons the rest of the year. |
+
+## Unicorns and the Dragon setting
+
+- Any visit, in any theme, has a `unicorn_chance` percent chance of being a unicorn with a rainbow trail. `0` turns it off.
+- Home Assistant can't hide a setting depending on another one, so **Dragon** is an optional setting instead. Turn on **Show unused optional configuration options** to see it. It only matters for the `dragons` theme, and for `auto` outside the holidays.
 
 ## Good to know
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.0
+
+- A unicorn with a rainbow trail can now turn up in every theme. New `unicorn_chance` option: 5% by default, 0 (off) to 25%.
+- New `extralarge` size.
+- The Dragon setting is now optional and hidden under "Show unused optional configuration options", since it only matters for the dragons and auto themes.
+- Setting descriptions no longer talk about dragons when they apply to every visitor.
+
 ## 1.5.0
 
 - New `minecraft` theme in blocky pixel art, all walking along the bottom of the screen: Steve with a diamond pickaxe, a creeper that flashes and hisses (it never explodes), an enderman carrying a grass block that blinks away mid-walk, a skeleton archer that fires an arrow, and Denis the dog.

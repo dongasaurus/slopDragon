@@ -54,6 +54,7 @@ test("defaults: every 15 minutes, 5 seconds on screen", async () => {
   assert.equal(cfg.interval, 15);
   assert.equal(cfg.duration, 5);
   assert.equal(cfg.dragon, "random");
+  assert.equal(cfg.unicorn, 5);
 
   await page.clock.runFor(15 * MINUTE - 1000);
   assert.equal(await overlayCount(page), 0, "no dragon before 15 minutes");
@@ -170,7 +171,7 @@ const character = (page) => page.locator("dragon-flyby-overlay").getAttribute("d
 test("every character renders and is cleaned up", async () => {
   const page = await open("duration=2");
   const all = await page.evaluate(() => window.dragonFlyby.characters);
-  assert.deepEqual([...all].sort(), [...new Set(Object.values(CAST).flat())].sort());
+  assert.deepEqual([...all].sort(), [...new Set([...Object.values(CAST).flat(), "unicorn"])].sort());
   for (const key of all) {
     assert.equal(await page.evaluate((k) => window.dragonFlyby.fly(k), key), key);
     assert.equal(await character(page), key);
@@ -188,7 +189,7 @@ test("every character renders and is cleaned up", async () => {
 
 for (const theme of ["christmas", "australianchristmas", "halloween", "easter", "minecraft"]) {
   test(`${theme} theme only sends ${theme} visitors`, async () => {
-    const page = await open(`theme=${theme}&interval=1`);
+    const page = await open(`theme=${theme}&interval=1&unicorn=0`);
     const seen = new Set();
     for (let i = 0; i < 12; i++) {
       await page.clock.runFor(60 * 1000);
@@ -225,7 +226,7 @@ test("auto theme follows the calendar", async () => {
     ["2027-03-28T12:00:00", "easter"], // Easter Sunday 2027
   ];
   for (const [date, expected] of cases) {
-    const page = await open("theme=auto&interval=1", { time: new Date(date).getTime() });
+    const page = await open("theme=auto&interval=1&unicorn=0", { time: new Date(date).getTime() });
     assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), expected, date);
     await page.clock.runFor(60 * 1000);
     assert.ok(CAST[expected].includes(await character(page)), `${date} sends a ${expected} visitor`);
@@ -237,7 +238,7 @@ test("auto theme uses the Australian Christmas in Australia", async () => {
   const december = new Date("2026-12-10T12:00:00").getTime();
 
   // Home Assistant's country setting wins.
-  let page = await open("theme=auto&interval=1", { time: december });
+  let page = await open("theme=auto&interval=1&unicorn=0", { time: december });
   await page.evaluate(() => {
     const ha = document.createElement("home-assistant");
     ha.hass = { panels: {}, config: { country: "AU", time_zone: "Europe/London" } };
@@ -276,4 +277,49 @@ test("the Santa-hat dragon visits both Christmas themes", async () => {
     assert.ok(hat, "and wears its Santa hat");
     await page.close();
   }
+});
+
+test("the unicorn turns up by chance in every theme", async () => {
+  for (const theme of ["dragons", "christmas", "minecraft"]) {
+    const page = await open(`theme=${theme}&interval=1&unicorn=25`);
+    const seen = [];
+    for (let i = 0; i < 40; i++) {
+      await page.clock.runFor(60 * 1000);
+      seen.push(await character(page));
+    }
+    const unicorns = seen.filter((k) => k === "unicorn").length;
+    assert.ok(unicorns >= 1 && unicorns <= 25, `${theme}: ${unicorns} unicorns in 40 visits at 25%`);
+    for (const k of seen) assert.ok(k === "unicorn" || CAST[theme].includes(k), `${k} fits ${theme}`);
+    await page.close();
+  }
+});
+
+test("unicorn chance 0 turns it off, and the chance is capped at 25%", async () => {
+  let page = await open("interval=1&unicorn=0");
+  for (let i = 0; i < 40; i++) {
+    await page.clock.runFor(60 * 1000);
+    assert.notEqual(await character(page), "unicorn");
+  }
+  await page.close();
+  page = await open("unicorn=80");
+  assert.equal(await page.evaluate(() => window.dragonFlyby.config.unicorn), 25);
+  assert.equal(await page.evaluate(() => window.dragonFlyby.fly("unicorn")), "unicorn");
+  await page.close();
+});
+
+test("extra large size draws visitors bigger than large", async () => {
+  const width = async (size) => {
+    const page = await open(`size=${size}`);
+    const w = await page.evaluate(() => {
+      window.dragonFlyby.fly("shadow");
+      return parseFloat(document.querySelector("dragon-flyby-overlay").shadowRoot
+        .querySelector(".flight").style.getPropertyValue("--w"));
+    });
+    await page.close();
+    return w;
+  };
+  const large = await width("large");
+  const xl = await width("extralarge");
+  assert.equal(large, 350);
+  assert.ok(xl > large, `extralarge (${xl}) is bigger than large (${large})`);
 });

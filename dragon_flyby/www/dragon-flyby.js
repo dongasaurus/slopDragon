@@ -20,7 +20,8 @@
  *   theme       dragons | christmas | australianchristmas | halloween |
  *               easter | minecraft | auto                     (default dragons)
  *   dragon      random | shadow | spike | ember | moon        (default random)
- *   size        small | medium | large                        (default medium)
+ *   unicorn     % chance a unicorn comes instead, 0 to 25     (default 5)
+ *   size        small | medium | large | extralarge           (default medium)
  *   dashboards  1 = only show on dashboards                   (default 1)
  *   onload      1 = also show a few seconds after load        (default 0)
  *
@@ -35,10 +36,10 @@
  *   dragonFlyby.fly("sleigh")     - a specific visitor (see dragonFlyby.characters)
  */
 
-const VERSION = "1.5.0";
+const VERSION = "1.6.0";
 const DEFAULT_DURATION_S = 5;
 const MAX_DURATION_S = 10;
-const SIZES = { small: 170, medium: 250, large: 350 };
+const SIZES = { small: 170, medium: 250, large: 350, extralarge: 480 };
 const THEMES = ["dragons", "christmas", "australianchristmas", "halloween", "easter", "minecraft"];
 
 // Wing, tail and head pivots in SVG viewBox units (viewBox 0 -40 320 240).
@@ -114,6 +115,7 @@ function readConfig(url) {
     duration: num("duration", DEFAULT_DURATION_S, 1, MAX_DURATION_S), // seconds
     theme: pick("theme", "dragons", [...THEMES, "auto"]),
     dragon: pick("dragon", "random", ["random", ...Object.keys(DRAGONS)]),
+    unicorn: num("unicorn", 5, 0, 25), // percent
     size: pick("size", "medium", Object.keys(SIZES)),
     dashboardsOnly: bool("dashboards", true),
     flyOnLoad: bool("onload", false),
@@ -1081,6 +1083,62 @@ const MINECRAFT_CSS = `
 @keyframes shoot { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(220px); opacity: 0; } }
 `;
 
+/* ---- Unicorn (a rare visitor in every theme) ----------------------------- */
+
+const RAINBOW = ["#ff595e", "#ff924c", "#ffca3a", "#8ac926", "#1982c4", "#6a4c93"];
+
+function unicornSvg() {
+  const trail = RAINBOW.map((c, i) =>
+    `<path class="ln" style="stroke:${c};stroke-width:5.5" d="M100 ${62 + i * 5} C70 ${52 + i * 5} 30 ${78 + i * 5} -60 ${58 + i * 5}"/>`).join("");
+  const leg = (fill, x, offset) => `<g class="leg gallop" style="${delayed(offset)}">
+      <path fill="${fill}" d="M${x} 90 L${x - 4} 118 L${x + 2} 119 L${x + 8} 91 Z"/>
+      <path fill="#f48fb1" d="M${x - 5} 116 L${x + 3} 117 L${x + 3} 123 L${x - 5} 122 Z"/>
+    </g>`;
+  const wing = (fill, tip, cls) => `<g class="uwing ${cls}"><g transform="translate(152 66) scale(1.3) translate(-152 -66)">
+      <path fill="${fill}" d="M152 66 C142 42 132 22 112 8 C117 20 113 25 106 29 C114 31 116 37 112 42 C120 44 122 50 120 55 C128 57 134 61 136 68 Z"/>
+      <path class="ln" style="stroke:${tip};stroke-width:1.6" d="M112 9 C120 18 130 30 138 44 M106 29 C118 34 128 42 140 54 M112 42 C122 46 130 52 140 62"/>
+    </g></g>`;
+  return `${svgOpen("unicorn", [-60, -30, 300, 170])}
+    <g opacity="0.85">${trail}</g>
+    ${sparkle(-20, 50, 0.6, "#fff59d", 0)}${sparkle(20, 92, 0.45, "#f8bbd0", -0.3)}${sparkle(-46, 82, 0.5, "#b3e5fc", -0.55)}
+    ${sparkle(50, 40, 0.4, "#ffffff", -0.2)}
+    ${wing("#e9e1f7", "#c5b3e6", "far")}
+    ${leg("#ece6f7", 108, 0.5)}${leg("#ece6f7", 166, 0.08)}
+    <g class="utail">
+      <path fill="#f48fb1" d="M96 70 C78 62 66 74 50 64 C60 78 76 82 94 80 Z"/>
+      <path fill="#ce93d8" d="M96 74 C80 72 70 86 54 82 C66 92 82 90 96 82 Z"/>
+      <path fill="#81d4fa" d="M96 78 C84 82 78 96 64 96 C76 102 90 96 98 84 Z"/>
+    </g>
+    <path fill="#fdfcff" d="M92 78 C92 62 110 54 136 54 C160 54 176 60 180 74 C184 90 170 100 140 100 C112 100 92 94 92 78 Z"/>
+    <path fill="#fdfcff" d="M166 66 C170 52 178 40 188 32 L204 44 C196 52 190 62 186 78 Z"/>
+    <path fill="#fdfcff" d="M186 30 C194 22 208 22 216 28 C224 32 230 38 228 44 C224 50 214 50 206 48 C200 48 192 44 188 40 Z"/>
+    <path fill="#fdfcff" d="M193 27 L190 14 L199 23 Z"/>
+    <path fill="#ffd54f" d="M201 23 L214 -4 L208 25 Z"/>
+    <path class="ln" style="stroke:#f9a825;stroke-width:1.2" d="M203 19 L209 20 M205 13 L211 14 M208 6 L212 7"/>
+    <g class="umane">
+      <path fill="#f48fb1" d="M190 22 C178 24 168 38 160 56 C170 50 178 46 187 40 Z"/>
+      <path fill="#ce93d8" d="M186 34 C174 40 168 54 164 70 C174 62 180 54 188 48 Z"/>
+      <path fill="#81d4fa" d="M184 46 C176 54 172 66 170 78 C178 70 184 62 188 56 Z"/>
+    </g>
+    <ellipse class="ns" fill="#3b2a54" cx="206" cy="35" rx="3.4" ry="4.2"/>
+    <circle class="ns" fill="#ffffff" cx="207" cy="33.5" r="1.3"/>
+    <path class="ln" style="stroke:#3b2a54;stroke-width:1.2" d="M203 31 L200 28 M205 30.5 L203.5 27"/>
+    <circle class="ns" fill="#f8bbd0" cx="213" cy="42" r="3.2"/>
+    <circle class="ns" fill="#c7b8e0" cx="224" cy="40" r="1.3"/>
+    ${leg("#fdfcff", 112, 0)}${leg("#fdfcff", 170, 0.58)}
+    ${wing("#ffffff", "#f8bbd0", "near")}
+  </svg>`;
+}
+
+const UNICORN_CSS = `
+.uwing { transform-box: fill-box; transform-origin: 85% 100%; animation: uflap var(--cycle) ease-in-out infinite; }
+.uwing.far { animation-delay: calc(var(--cycle) * -0.1); }
+.umane, .utail { transform-box: fill-box; transform-origin: 100% 0; animation: flutter calc(var(--cycle) * 0.9) ease-in-out infinite; }
+.utail { transform-origin: 100% 30%; }
+@keyframes uflap { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(-0.45) skewX(-6deg); } }
+@keyframes flutter { 0%, 100% { transform: skewY(0deg) scaleX(1); } 50% { transform: skewY(-7deg) scaleX(1.07); } }
+`;
+
 const DRAGON_CSS = `
 .dragon path { stroke: var(--line); stroke-width: 1.1; stroke-linejoin: round; }
 .dragon .bones { fill: none; stroke-width: 1.4; stroke-linecap: round; opacity: 0.9; }
@@ -1237,6 +1295,13 @@ const ACTORS = {
     scale: 0.32, vb: [0, 0, 100, 100], weight: 2, cycle: 0.3,
     line: "#c99400", css: EASTER_CSS, svg: chickSvg,
   },
+  // Belongs to no theme: it turns up by chance (the unicorn option) in all of them.
+  unicorn: {
+    theme: [], name: "Unicorn", motion: "fly", bob: "fly",
+    scale: 1.1, vb: [-60, -30, 300, 170], weight: 0, cycle: 0.45, tilt: 18,
+    line: "#b9a6d8", glow: "rgba(255, 215, 250, 0.7)", css: UNICORN_CSS, svg: unicornSvg,
+  },
+
   // Pixel sizes match across the cast: 1.1 screen px per SVG unit at medium.
   steve: {
     theme: "minecraft", name: "Steve", motion: "walk",
@@ -1385,6 +1450,8 @@ function createFlyby(cfg) {
   // request: a character key, a theme name, or nothing for the current theme.
   function pickActor(request) {
     if (request && ACTORS[request]) return request;
+    // Any visit, in any theme, might be the rare unicorn instead.
+    if (Math.random() * 100 < cfg.unicorn) return "unicorn";
     const theme = THEMES.includes(request) ? request : activeTheme(cfg);
     if (theme === "dragons" && cfg.dragon !== "random") return cfg.dragon;
     let cast = Object.keys(ACTORS).filter((k) => [].concat(ACTORS[k].theme).includes(theme));
@@ -1413,7 +1480,7 @@ function createFlyby(cfg) {
     const mirror = !ltr && actor.flip !== false;
     const onGround = ["walk", "hop", "surf"].includes(actor.motion);
     const durationMs = Math.round(cfg.duration * 1000);
-    let cycle = actor.cycle * (cfg.size === "large" ? 1.15 : 1);
+    let cycle = actor.cycle * ({ large: 1.15, extralarge: 1.25 }[cfg.size] || 1);
     // Slower crossings get slower steps so feet don't skate.
     if (actor.motion === "walk" || actor.motion === "hop") {
       cycle *= clamp(cfg.duration / DEFAULT_DURATION_S, 0.75, 1.6);

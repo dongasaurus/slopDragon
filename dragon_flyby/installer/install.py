@@ -40,6 +40,7 @@ DEFAULTS = {
     "interval_minutes": 15,
     "duration_seconds": 5,
     "theme": "dragons",
+    "unicorn_chance": 5,
     "dragon": "random",
     "size": "medium",
     "dashboards_only": True,
@@ -68,6 +69,9 @@ def load_options() -> dict:
         log(f"No options file at {OPTIONS_FILE}, using defaults.")
     options["interval_minutes"] = max(1, int(options["interval_minutes"]))
     options["duration_seconds"] = min(MAX_DURATION, max(1, float(options["duration_seconds"])))
+    options["unicorn_chance"] = min(25, max(0, int(options["unicorn_chance"])))
+    # "dragon" is optional in the add-on settings and may be missing or null.
+    options["dragon"] = options.get("dragon") or "random"
     return options
 
 
@@ -77,6 +81,7 @@ def resource_url(options: dict, digest: str) -> str:
         "interval": options["interval_minutes"],
         "duration": int(duration) if float(duration).is_integer() else duration,
         "theme": options["theme"],
+        "unicorn": options["unicorn_chance"],
         "dragon": options["dragon"],
         "size": options["size"],
         "dashboards": int(bool(options["dashboards_only"])),

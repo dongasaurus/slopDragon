@@ -1,25 +1,28 @@
 configuration:
   enabled:
     name: Enabled
-    description: Turn off and restart the add-on to remove the dragon from your dashboards.
+    description: Turn off and restart the add-on to remove the visitors from your dashboards.
   interval_minutes:
-    name: Minutes between flights
-    description: How often a dragon flies across the screen (1-1440).
+    name: Minutes between visits
+    description: How often a visitor crosses the screen (1-1440).
   duration_seconds:
     name: Seconds on screen
-    description: How long each flight lasts, 1 to 10 seconds. Default 5.
+    description: How long each visit lasts, 1 to 10 seconds. Default 5.
   theme:
     name: Theme
-    description: "dragons, christmas (sleigh, reindeer, elf, Santa-hat dragon), australianchristmas (kangaroo sleigh, surfing, cricket, air conditioner, Santa-hat dragon), halloween (witch, bats, ghost, skeleton, pumpkin), easter (bunny, chick, butterflies), minecraft (Steve, creeper, enderman, skeleton, Denis the dog), or auto to follow the calendar."
+    description: "dragons, christmas (sleigh, reindeer, elf, Santa-hat dragon), australianchristmas (kangaroo sleigh, surfing, cricket, air conditioner, Santa-hat dragon), halloween (witch, bats, ghost, skeleton, pumpkin), easter (bunny, chick, butterflies), minecraft (Steve, creeper, enderman, skeleton, Denis the dog), or auto to follow the calendar. To pick one specific dragon, turn on 'Show unused optional configuration options' below."
+  unicorn_chance:
+    name: Unicorn chance (%)
+    description: Chance that a unicorn flies by instead of the usual visitor, in every theme. 0 turns it off, 25 is the most. Default 5.
   dragon:
-    name: Dragon
-    description: "Used by the dragons theme: random, shadow (Shadow Wing), spike (Spike Tail), ember (Ember Horn) or moon (Moon Glider)."
+    name: Dragon (dragons and auto themes only)
+    description: "Pick one dragon instead of a random one: shadow (Shadow Wing), spike (Spike Tail), ember (Ember Horn) or moon (Moon Glider). Only used by the dragons theme, and by auto outside the holidays."
   size:
     name: Size
-    description: How big the dragon is drawn.
+    description: How big the visitors are drawn (small, medium, large or extralarge).
   dashboards_only:
     name: Dashboards only
-    description: Only fly over dashboards, not over Settings or other pages.
+    description: Only show visitors on dashboards, not on Settings or other pages.
   fly_on_load:
-    name: Fly on page load
-    description: Also send a dragon a few seconds after a dashboard is opened.
+    name: Visit on page load
+    description: Also send a visitor a few seconds after a dashboard is opened.

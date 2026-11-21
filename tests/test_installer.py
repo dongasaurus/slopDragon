@@ -185,9 +185,29 @@ class InstallerTest(unittest.TestCase):
         install.CONNECT_TIMEOUT = 0.5
         self.assertEqual(self.run_with(), 1)
 
+    def test_unicorn_chance_is_passed_and_capped(self) -> None:
+        self.run_with()
+        self.assertIn("unicorn=5&", self.ha.resources[0]["url"])
+        self.run_with(unicorn_chance=0)
+        self.assertIn("unicorn=0&", self.ha.resources[0]["url"])
+        self.run_with(unicorn_chance=60)
+        self.assertIn("unicorn=25&", self.ha.resources[0]["url"])
+
+    def test_optional_dragon_defaults_to_random(self) -> None:
+        options = {k: v for k, v in install.DEFAULTS.items() if k != "dragon"}
+        self.options.write_text(json.dumps(options))
+        self.assertEqual(install.main(), 0)
+        self.assertIn("dragon=random", self.ha.resources[0]["url"])
+        self.run_with(dragon="ember", size="extralarge")
+        self.assertIn("dragon=ember", self.ha.resources[0]["url"])
+        self.assertIn("size=extralarge", self.ha.resources[0]["url"])
+
     def test_addon_schema_matches_installer_defaults(self) -> None:
         text = (ADDON / "config.yaml").read_text()
+        self.assertIn("  dragon: list(random|shadow|spike|ember|moon)?\n", text)
         for key, value in install.DEFAULTS.items():
+            if key == "dragon":  # optional, so it has no default in config.yaml
+                continue
             expected = str(value).lower() if isinstance(value, bool) else str(value)
             self.assertIn(f"  {key}: {expected}\n", text)
 
