@@ -67,11 +67,22 @@ test("defaults: every 15 minutes, 5 seconds on screen", async () => {
   await page.close();
 });
 
-test("duration can never exceed 5 seconds", async () => {
-  const page = await open("duration=30");
-  assert.equal(await page.evaluate(() => window.dragonFlyby.config.duration), 5);
+test("duration of up to 10 seconds is allowed", async () => {
+  const page = await open("duration=8");
+  assert.equal(await page.evaluate(() => window.dragonFlyby.config.duration), 8);
   await page.evaluate(() => window.dragonFlyby.fly());
-  await page.clock.runFor(4999);
+  await page.clock.runFor(7999);
+  assert.equal(await overlayCount(page), 1);
+  await page.clock.runFor(1);
+  assert.equal(await overlayCount(page), 0);
+  await page.close();
+});
+
+test("duration can never exceed 10 seconds", async () => {
+  const page = await open("duration=30");
+  assert.equal(await page.evaluate(() => window.dragonFlyby.config.duration), 10);
+  await page.evaluate(() => window.dragonFlyby.fly());
+  await page.clock.runFor(9999);
   assert.equal(await overlayCount(page), 1);
   await page.clock.runFor(1);
   assert.equal(await overlayCount(page), 0);

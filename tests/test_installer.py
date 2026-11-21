@@ -136,9 +136,13 @@ class InstallerTest(unittest.TestCase):
         self.assertIn("dragon=ember", res["url"])
         self.assertIn("size=large", res["url"])
 
-    def test_duration_is_capped_at_five_seconds(self) -> None:
+    def test_duration_up_to_ten_seconds_is_kept(self) -> None:
+        self.run_with(duration_seconds=8)
+        self.assertIn("duration=8&", self.ha.resources[0]["url"])
+
+    def test_duration_is_capped_at_ten_seconds(self) -> None:
         self.run_with(duration_seconds=12)
-        self.assertIn("duration=5&", self.ha.resources[0]["url"])
+        self.assertIn("duration=10&", self.ha.resources[0]["url"])
 
     def test_other_resources_are_left_alone_and_duplicates_removed(self) -> None:
         self.ha.add("/hacsfiles/button-card/button-card.js")

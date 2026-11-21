@@ -1,5 +1,5 @@
 name: Dragon Flyby
-version: "1.0.0"
+version: "1.1.0"
 slug: dragon_flyby
 description: An animated dragon swoops across your dashboard every few minutes.
 url: https://github.com/dongasaurus/slopDragon
@@ -24,7 +24,7 @@ options:
 schema:
   enabled: bool
   interval_minutes: int(1,1440)
-  duration_seconds: float(1,5)
+  duration_seconds: float(1,10)
   dragon: list(random|shadow|spike|ember|moon)
   size: list(small|medium|large)
   dashboards_only: bool

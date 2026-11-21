@@ -1,6 +1,6 @@
 # Dragon Flyby
 
-Every few minutes a dragon swoops across your dashboard, then disappears. It never stays on screen for more than 5 seconds and it doesn't change anything on the dashboard.
+Every few minutes a dragon swoops across your dashboard, then disappears. By default it stays on screen for 5 seconds (you can allow up to 10), and it doesn't change anything on the dashboard.
 
 ## Setup
 
@@ -17,7 +17,7 @@ If the log says the `www` folder was just created, restart Home Assistant once, 
 | --- | --- | --- |
 | `enabled` | `true` | Turn this off and start the add-on again to remove the dragon. |
 | `interval_minutes` | `15` | Minutes between flights (1 to 1440). |
-| `duration_seconds` | `5` | Seconds each flight lasts (1 to 5). |
+| `duration_seconds` | `5` | Seconds each flight lasts (1 to 10). |
 | `dragon` | `random` | `random`, `shadow` (Shadow Wing), `spike` (Spike Tail), `ember` (Ember Horn) or `moon` (Moon Glider). |
 | `size` | `medium` | `small`, `medium` or `large`. |
 | `dashboards_only` | `true` | Only fly over dashboards, not over Settings or other pages. |

@@ -14,7 +14,7 @@
  *   /local/dragon-flyby/dragon-flyby.js?interval=15&duration=5&dragon=random
  *
  *   interval    minutes between flights                 (default 15)
- *   duration    seconds on screen, never more than 5    (default 5)
+ *   duration    seconds on screen, 1 to 10              (default 5)
  *   dragon      random | shadow | spike | ember | moon  (default random)
  *   size        small | medium | large                  (default medium)
  *   dashboards  1 = only fly over dashboards            (default 1)
@@ -23,8 +23,9 @@
  * From the browser console: dragonFlyby.fly() or dragonFlyby.fly("ember").
  */
 
-const VERSION = "1.0.0";
-const MAX_DURATION_S = 5;
+const VERSION = "1.1.0";
+const DEFAULT_DURATION_S = 5;
+const MAX_DURATION_S = 10;
 const SIZES = { small: 170, medium: 250, large: 350 };
 
 // Wing, tail and head pivots in SVG viewBox units (viewBox 0 -40 320 240).
@@ -98,7 +99,7 @@ function readConfig(url) {
   };
   return {
     interval: num("interval", 15, 0.25, 1440), // minutes
-    duration: num("duration", MAX_DURATION_S, 1, MAX_DURATION_S), // seconds
+    duration: num("duration", DEFAULT_DURATION_S, 1, MAX_DURATION_S), // seconds
     dragon: pick("dragon", "random", ["random", ...Object.keys(DRAGONS)]),
     size: pick("size", "medium", Object.keys(SIZES)),
     dashboardsOnly: bool("dashboards", true),

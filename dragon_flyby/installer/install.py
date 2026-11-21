@@ -33,7 +33,7 @@ CONNECT_TIMEOUT = float(os.environ.get("DRAGON_CONNECT_TIMEOUT", "120"))
 FOLDER = "dragon-flyby"
 FILENAME = "dragon-flyby.js"
 URL_PATH = f"/local/{FOLDER}/{FILENAME}"
-MAX_DURATION = 5
+MAX_DURATION = 10
 
 DEFAULTS = {
     "enabled": True,

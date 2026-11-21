@@ -1,6 +1,6 @@
 # Dragon Flyby for Home Assistant
 
-Every 15 minutes a dragon swoops across your Home Assistant dashboard. It stays on screen for no more than 5 seconds, flies over everything, and doesn't change anything on the dashboard underneath it.
+Every 15 minutes a dragon swoops across your Home Assistant dashboard. It stays on screen for 5 seconds (configurable up to 10), flies over everything, and doesn't change anything on the dashboard underneath it.
 
 ![The four dragons](docs/dragons.png)
 
@@ -32,7 +32,7 @@ The add-on installs the dragon, then stops. **Seeing "stopped" afterwards is nor
 | --- | --- | --- |
 | `enabled` | `true` | Turn this off and start the add-on again to remove the dragon. |
 | `interval_minutes` | `15` | Minutes between flights (1 to 1440). |
-| `duration_seconds` | `5` | Seconds each flight lasts (1 to 5, never more than 5). |
+| `duration_seconds` | `5` | Seconds each flight lasts (1 to 10). |
 | `dragon` | `random` | `random`, `shadow`, `spike`, `ember` or `moon`. |
 | `size` | `medium` | `small`, `medium` or `large`. |
 | `dashboards_only` | `true` | Only fly over dashboards, not over Settings or other pages. |
