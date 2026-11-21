@@ -141,6 +141,8 @@ class InstallerTest(unittest.TestCase):
     def test_australian_christmas_theme_is_passed_through(self) -> None:
         self.run_with(theme="australianchristmas")
         self.assertIn("theme=australianchristmas", self.ha.resources[0]["url"])
+        self.run_with(theme="minecraft")
+        self.assertIn("theme=minecraft", self.ha.resources[0]["url"])
 
     def test_duration_up_to_ten_seconds_is_kept(self) -> None:
         self.run_with(duration_seconds=8)

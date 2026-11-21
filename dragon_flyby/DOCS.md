@@ -18,7 +18,7 @@ If the log says the `www` folder was just created, restart Home Assistant once, 
 | `enabled` | `true` | Turn this off and start the add-on again to remove the dragon. |
 | `interval_minutes` | `15` | Minutes between flights (1 to 1440). |
 | `duration_seconds` | `5` | Seconds each flight lasts (1 to 10). |
-| `theme` | `dragons` | `dragons`, `christmas`, `australianchristmas`, `halloween`, `easter` or `auto`. See below. |
+| `theme` | `dragons` | `dragons`, `christmas`, `australianchristmas`, `halloween`, `easter`, `minecraft` or `auto`. See below. |
 | `dragon` | `random` | Used by the `dragons` theme: `random`, `shadow` (Shadow Wing), `spike` (Spike Tail), `ember` (Ember Horn) or `moon` (Moon Glider). |
 | `size` | `medium` | `small`, `medium` or `large`. |
 | `dashboards_only` | `true` | Only fly over dashboards, not over Settings or other pages. |
@@ -35,6 +35,7 @@ After changing options, start the add-on again and refresh your dashboards.
 | `australianchristmas` | Santa's sleigh pulled by kangaroos, Santa surfing, Santa playing cricket, Santa cooling off in front of the air conditioner, a reindeer with a fan, Santa on a flamingo pool floatie, a dragon in a Santa hat. |
 | `halloween` | A witch on a broomstick, a swarm of bats, a ghost, a skeleton walking and a jack-o'-lantern hopping along the bottom. |
 | `easter` | The Easter bunny hopping with a basket of eggs, a chick waddling, butterflies. |
+| `minecraft` | Blocky pixel art walking along the bottom: Steve with a pickaxe, a creeper that flashes and hisses, an enderman carrying a block, a skeleton archer, Denis the dog. |
 | `auto` | Halloween in October, Christmas in December (the Australian one if Home Assistant's country or time zone is Australia), Easter from a week before Easter Sunday to Easter Monday, dragons the rest of the year. |
 
 ## Good to know

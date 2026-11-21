@@ -13,9 +13,9 @@ The dragons are original artwork inspired by the films *How to Train Your Dragon
 | Ember Horn (`ember`) | Red, curved horns, spiny back | Flame |
 | Moon Glider (`moon`) | Pale and glowing, ice-blue eyes | Blue-white plasma |
 
-## Holiday themes
+## Themes
 
-Set the `theme` option to swap the dragons for seasonal visitors. They follow the same interval and duration.
+Set the `theme` option to swap the dragons for seasonal or Minecraft visitors. They follow the same interval and duration.
 
 ![Holiday visitors](docs/holidays.png)
 
@@ -25,6 +25,7 @@ Set the `theme` option to swap the dragons for seasonal visitors. They follow th
 | `australianchristmas` | Christmas in an Aussie summer: Santa's sleigh pulled by hopping kangaroos ("G'day!"), Santa surfing a wave along the bottom, Santa in cricket pads and zinc cream running between the wickets ("Yes! Run!"), Santa cooling off in a deckchair in front of the air conditioner ("Ahhh, bliss!"), a reindeer in sunnies cooling off with a fan, Santa drifting past on a flamingo pool floatie with a cold drink, and the dragon in a Santa hat. |
 | `halloween` | A witch on her broomstick (with her cat) and a swarm of bats fly by, a ghost floats past ("BOO!"), a skeleton walks and a jack-o'-lantern hops along the bottom. |
 | `easter` | The Easter bunny hops along the bottom with a basket of eggs, a chick in its eggshell waddles past, butterflies flutter by. |
+| `minecraft` | Blocky pixel-art visitors walking along the bottom: Steve with a diamond pickaxe, a creeper that flashes and hisses ("Sssss...", it never explodes), an enderman carrying a grass block that teleports mid-walk, a skeleton archer that fires an arrow, and Denis the dog ("Woof!"). Not part of `auto`. |
 | `auto` | Follows the calendar: Halloween all of October, Christmas all of December (the Australian one if Home Assistant is set to Australia), Easter from a week before Easter Sunday to Easter Monday, dragons the rest of the year. |
 
 ## Install
@@ -47,7 +48,7 @@ The add-on installs the dragon, then stops. **Seeing "stopped" afterwards is nor
 | `enabled` | `true` | Turn this off and start the add-on again to remove the dragon. |
 | `interval_minutes` | `15` | Minutes between flights (1 to 1440). |
 | `duration_seconds` | `5` | Seconds each flight lasts (1 to 10). |
-| `theme` | `dragons` | `dragons`, `christmas`, `australianchristmas`, `halloween`, `easter` or `auto` (follows the calendar). |
+| `theme` | `dragons` | `dragons`, `christmas`, `australianchristmas`, `halloween`, `easter`, `minecraft` or `auto` (follows the calendar). |
 | `dragon` | `random` | Used by the `dragons` theme: `random`, `shadow`, `spike`, `ember` or `moon`. |
 | `size` | `medium` | `small`, `medium` or `large`. |
 | `dashboards_only` | `true` | Only fly over dashboards, not over Settings or other pages. |
@@ -112,3 +113,5 @@ The browser tests need Node 18+ and Playwright with Chromium.
 ## Credits
 
 Original artwork and code. The dragons are inspired by DreamWorks Animation's *How to Train Your Dragon*. This project isn't affiliated with or endorsed by DreamWorks.
+
+The `minecraft` theme is fan art. Minecraft is a trademark of Mojang Synergies AB, and this project isn't affiliated with or endorsed by Mojang or Microsoft.

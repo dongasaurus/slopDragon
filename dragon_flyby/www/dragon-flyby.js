@@ -18,7 +18,7 @@
  *   interval    minutes between visits                        (default 15)
  *   duration    seconds on screen, 1 to 10                    (default 5)
  *   theme       dragons | christmas | australianchristmas | halloween |
- *               easter | auto                                 (default dragons)
+ *               easter | minecraft | auto                     (default dragons)
  *   dragon      random | shadow | spike | ember | moon        (default random)
  *   size        small | medium | large                        (default medium)
  *   dashboards  1 = only show on dashboards                   (default 1)
@@ -35,11 +35,11 @@
  *   dragonFlyby.fly("sleigh")     - a specific visitor (see dragonFlyby.characters)
  */
 
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 const DEFAULT_DURATION_S = 5;
 const MAX_DURATION_S = 10;
 const SIZES = { small: 170, medium: 250, large: 350 };
-const THEMES = ["dragons", "christmas", "australianchristmas", "halloween", "easter"];
+const THEMES = ["dragons", "christmas", "australianchristmas", "halloween", "easter", "minecraft"];
 
 // Wing, tail and head pivots in SVG viewBox units (viewBox 0 -40 320 240).
 const SHOULDER = "172px 97px";
@@ -886,6 +886,201 @@ const EASTER_CSS = `
 @keyframes bw { from { transform: scaleX(1); } to { transform: scaleX(0.2); } }
 `;
 
+/* ---- Minecraft ---------------------------------------------------------- */
+// Fan-made blocky pixel art. Every character is drawn on a 4-unit pixel grid.
+
+const PX = 4;
+
+// Draws rows of characters as pixels; each character maps to a colour in the
+// palette and "." is see-through. Runs of the same colour become one rect.
+function pixels(x, y, rows, palette, size = PX) {
+  let out = "";
+  rows.forEach((row, j) => {
+    for (let i = 0; i < row.length; ) {
+      const c = row[i];
+      let run = 1;
+      while (row[i + run] === c) run++;
+      if (palette[c]) {
+        out += `<rect fill="${palette[c]}" x="${x + i * size}" y="${y + j * size}" ` +
+          `width="${run * size + 0.3}" height="${size + 0.3}"/>`;
+      }
+      i += run;
+    }
+  });
+  return out;
+}
+
+// Deterministic speckled texture, so every visit looks the same.
+function mottled(width, height, seed, chars) {
+  let s = seed * 7919 + 17;
+  const rows = [];
+  for (let j = 0; j < height; j++) {
+    let row = "";
+    for (let i = 0; i < width; i++) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      row += chars[(s >> 8) % chars.length];
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+const overlay = (rows, top) =>
+  rows.map((row, j) => [...row].map((c, i) => (top[j]?.[i] && top[j][i] !== "." ? top[j][i] : c)).join(""));
+
+function darken(hex, factor) {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const ch = (v) => Math.round(v * factor).toString(16).padStart(2, "0");
+  return `#${ch(n >> 16)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+}
+const darker = (palette, factor = 0.72) =>
+  Object.fromEntries(Object.entries(palette).map(([k, v]) => [k, darken(v, factor)]));
+
+function grassBlock(x, y) {
+  const rows = overlay(mottled(8, 8, 3, "DDDDddl"), [
+    "GGgGGGgG", "gGGGgGGG", "G.gG.GgG", "...g..g.",
+  ]);
+  const palette = { G: "#5d9e35", g: "#4c8a2b", D: "#8b5a2b", d: "#6e4521", l: "#a06a38" };
+  const s = 8 * PX;
+  return `<path class="ns" fill="#79c24a" d="M${x} ${y} L${x + 8} ${y - 6} L${x + s + 8} ${y - 6} L${x + s} ${y} Z"/>
+    <path class="ns" fill="#5e3c1a" d="M${x + s} ${y} L${x + s + 8} ${y - 6} L${x + s + 8} ${y + s - 6} L${x + s} ${y + s} Z"/>
+    <path class="ns" fill="#4c8a2b" d="M${x + s} ${y} L${x + s + 8} ${y - 6} L${x + s + 8} ${y} L${x + s} ${y + 6} Z"/>
+    ${pixels(x, y, rows, palette)}`;
+}
+
+/* Steve, the blocky miner, walking with a diamond pickaxe. */
+const STEVE = {
+  H: "#4b3020", h: "#3a2416", S: "#c99a7c", s: "#b07f63", W: "#ffffff", B: "#4a3a9c", M: "#7a4e36",
+  T: "#00a3a3", t: "#008585", d: "#006b6b", P: "#3b3ba5", p: "#2d2d85", G: "#5e5e5e", g: "#474747",
+};
+const STEVE_HEAD = ["HHHHHHHH", "HHHHHHHh", "HHHSSSSS", "HHSSSSSS", "HHSSSWBS", "HSSSSSSs", "HSSSMMMs", "hSSSSSSs"];
+const STEVE_BODY = ["tTTt", "tTTt", "TTTt", "tTTt", "TTTd", "tTTt", "tTTt", "TTTt", "tTTd", "tTTt", "TTTt", "tTTt"];
+const STEVE_ARM = ["TTTt", "TTTt", "tTTt", "TTTt", "SSSs", "SSSs", "SSSs", "sSSs", "SSSs", "SSSs", "SSSs", "sSSs"];
+const STEVE_LEG = ["PPPp", "PPPp", "pPPp", "PPPp", "PPPp", "pPPp", "PPPp", "PPPp", "pPPp", "PPPp", "GGGg", "GGGg"];
+
+function steveSvg() {
+  const far = darker(STEVE);
+  const leg = (pal, offset) => `<g class="leg swing" style="${delayed(offset)}">${pixels(28, 80, STEVE_LEG, pal)}</g>`;
+  const arm = (pal, offset, extra = "") =>
+    `<g class="arm swing" style="${delayed(offset)}">${pixels(28, 32, STEVE_ARM, pal)}${extra}</g>`;
+  const pickaxe = `<g transform="rotate(60 36 80)">
+      ${pixels(34, 50, ["h", "H", "h", "H", "h", "H", "h", "H", "h", "H"], { H: "#7a5230", h: "#5c3d22" }, 3)}
+      ${pixels(21, 44, ["..ddddddddd..", ".dDDDDDDDDDd.", "dDd.......dDd"], { D: "#5ee8df", d: "#27a89f" }, 2.5)}
+    </g>`;
+  return `${svgOpen("pixel steve", [0, -4, 80, 134])}
+    ${arm(far, 0)}${leg(far, 0)}
+    ${pixels(28, 32, STEVE_BODY, STEVE)}
+    ${pixels(20, 0, STEVE_HEAD, STEVE)}
+    ${leg(STEVE, 0.5)}${arm(STEVE, 0.5, pickaxe)}
+  </svg>`;
+}
+
+/* Enderman, very tall, carrying a grass block, blinking away mid-walk. */
+const ENDER = { K: "#141414", k: "#242424", E: "#e07cf5", e: "#b84fd6" };
+const ENDER_HEAD = ["kKKKKKKk", "KKKKKKKK", "KKkKKKKK", "KKKKKKKK", "KKKKKeEE", "KKKKKKKK", "KkKKKKKK", "KKKKKKKk"];
+
+function endermanSvg() {
+  const far = { K: "#0a0a0a", k: "#141414" };
+  const limb = mottled(2, 26, 11, "KKKKk");
+  const leg = (pal, offset) =>
+    `<g class="leg swing-small" style="${delayed(offset)}">${pixels(40, 80, mottled(2, 28, 5, "KKKKk"), pal)}</g>`;
+  const arm = (pal, dx) => `<g transform="rotate(-42 ${44 + dx} 36)">${pixels(40 + dx, 36, limb, pal)}</g>`;
+  const motes = [[20, 40, 0], [92, 20, -0.3], [12, 120, -0.5], [100, 150, -0.15], [70, 6, -0.65], [24, 170, -0.4]]
+    .map(([x, y, d]) => `<rect class="twinkle" fill="#c86bf0" x="${x}" y="${y}" width="5" height="5" style="animation-delay:${d}s"/>`)
+    .join("");
+  return `${svgOpen("pixel enderman", [0, -12, 140, 206])}
+    <g class="blink">
+      ${motes}
+      ${arm(far, -4)}${leg(far, 0)}
+      ${pixels(36, 32, mottled(4, 12, 2, "KKKKk"), ENDER)}
+      ${pixels(28, 0, ENDER_HEAD, ENDER)}
+      ${leg(ENDER, 0.5)}
+      ${grassBlock(97, 80)}
+      ${arm(ENDER, 0)}
+    </g>
+  </svg>`;
+}
+
+/* Creeper, shuffling along, then flashing and hissing (but not exploding). */
+const CREEPER = { A: "#5bbf4a", B: "#48a83a", C: "#7ad466", D: "#3a8a2e", f: "#151515" };
+const CREEPER_FACE = ["........", "........", ".ff..ff.", ".ff..ff.", "...ff...", "..ffff..", "..ffff..", "..f..f.."];
+
+function creeperSvg() {
+  const foot = (x, seed, offset) =>
+    `<g class="step" style="${delayed(offset)}">${pixels(x, 80, mottled(4, 6, seed, "AABBD"), CREEPER)}</g>`;
+  return `${svgOpen("pixel creeper", [0, -40, 64, 148])}
+    <g class="swell">
+      ${foot(16, 3, 0)}${foot(32, 5, 0.5)}
+      ${pixels(16, 32, mottled(8, 12, 21, "AAABBCD"), CREEPER)}
+      ${pixels(16, 0, overlay(mottled(8, 8, 7, "AAABBCD"), CREEPER_FACE), CREEPER)}
+      <rect class="fuse" fill="#ffffff" x="16" y="0" width="32" height="104"/>
+    </g>
+    ${speech(-6, -40, 84, "Sssss...", "#2e7d32")}
+  </svg>`;
+}
+
+/* Skeleton archer, walking with a bow drawn, firing an arrow mid-walk. */
+const BONES = { W: "#dadada", w: "#bdbdbd", g: "#9a9a9a", K: "#333333", k: "#5a5a5a" };
+const BONES_HEAD = ["wWWWWWWw", "WWWWWWWW", "WWWWWWWW", "WWWWKKWW", "WWWWKKWw", "WWWWWWWW", "wWWWkWkW", "wwWWWWWw"];
+const BONES_BODY = ["wWWw", "W..W", "wWWw", "W..W", "wWWw", "W..W", "wWWw", ".WW.", ".WW.", ".Ww.", "wWWw", "wWWw"];
+
+function mcSkeletonSvg() {
+  const far = darker(BONES, 0.75);
+  const limb = mottled(2, 12, 4, "WWWw");
+  const leg = (pal, offset) => `<g class="leg swing" style="${delayed(offset)}">${pixels(32, 80, limb, pal)}</g>`;
+  const aim = (pal, dy) => `<g transform="rotate(-78 36 ${36 + dy})">${pixels(32, 34 + dy, limb, pal)}</g>`;
+  return `${svgOpen("pixel mcskeleton", [0, -4, 112, 134])}
+    ${aim(far, -3)}${leg(far, 0)}
+    ${pixels(28, 32, BONES_BODY, BONES)}
+    ${pixels(20, 0, BONES_HEAD, BONES)}
+    ${leg(BONES, 0.5)}
+    <path class="ln" style="stroke:#6d4c2a;stroke-width:4" d="M82 20 C96 30 96 62 82 72"/>
+    <path class="ln" style="stroke:#e0e0e0;stroke-width:1.2" d="M82 20 L76 46 L82 72"/>
+    <g class="shoot">
+      <path class="ln" style="stroke:#8d6e63;stroke-width:2.2" d="M70 46 L104 46"/>
+      <path class="ns" fill="#9e9e9e" d="M104 42 L111 46 L104 50 Z"/>
+      <path class="ns" fill="#f5f5f5" d="M70 46 L64 41 L68 46 L64 51 Z"/>
+    </g>
+    ${aim(BONES, 3)}
+  </svg>`;
+}
+
+/* Denis the dog, trotting along with a wagging tail. */
+const DOG = { F: "#ece8e0", f: "#d3cec4", g: "#bdb7ac", n: "#262626", R: "#c62828", r: "#9a1f1f" };
+
+function denisSvg() {
+  const far = darker(DOG, 0.8);
+  const leg = (x, pal, offset) =>
+    `<g class="leg swing-small" style="${delayed(offset)}">${pixels(x, 60, mottled(2, 8, x, "FFf"), pal)}</g>`;
+  return `${svgOpen("pixel denis", [0, -36, 100, 132])}
+    ${leg(20, far, 0.5)}${leg(46, far, 0)}
+    <g class="wag"><g transform="rotate(-35 14 42)">${pixels(10, 12, mottled(2, 8, 9, "FFf"), DOG)}</g></g>
+    ${pixels(16, 36, mottled(9, 6, 13, "FFFFFf"), DOG)}
+    ${pixels(52, 12, ["Ff", "FF"], far)}
+    ${pixels(52, 20, ["FFFFFF", "FFFFFF", "FFFFnF", "FFFFFF", "fFFFFF", "ffFFFF"], DOG)}
+    ${pixels(64, 12, ["FF", "fF"], DOG)}
+    ${pixels(76, 32, ["FFn", "FFF", "fFF"], DOG)}
+    ${pixels(48, 36, ["RR", "rR", "RR", "Rr", "RR"], DOG)}
+    ${leg(24, DOG, 0)}${leg(50, DOG, 0.5)}
+    ${speech(40, -36, 72, "Woof!", "#5d4037")}
+  </svg>`;
+}
+
+const MINECRAFT_CSS = `
+.pixel rect { stroke: none; shape-rendering: crispEdges; }
+.step { animation: step var(--cycle) ease-in-out infinite; }
+.swell { transform-box: fill-box; transform-origin: 50% 100%; animation: swell 1.5s ease-in var(--event-at) 1; }
+.fuse { opacity: 0; animation: fuse 0.25s steps(1, end) var(--event-at) 6; }
+.blink { animation: blink 0.8s linear var(--event-at) 1; }
+.shoot { animation: shoot 0.6s ease-in var(--event-at) 1 both; }
+.wag { transform-box: fill-box; transform-origin: 90% 100%; animation: swing-small calc(var(--cycle) * 0.6) ease-in-out infinite; }
+@keyframes step { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes swell { 0% { transform: scale(1); } 90% { transform: scale(1.12, 1.08); } 100% { transform: scale(1); } }
+@keyframes fuse { 0% { opacity: 0.75; } 50% { opacity: 0; } }
+@keyframes blink { 0% { opacity: 1; } 15%, 70% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes shoot { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(220px); opacity: 0; } }
+`;
+
 const DRAGON_CSS = `
 .dragon path { stroke: var(--line); stroke-width: 1.1; stroke-linejoin: round; }
 .dragon .bones { fill: none; stroke-width: 1.4; stroke-linecap: round; opacity: 0.9; }
@@ -1042,6 +1237,33 @@ const ACTORS = {
     scale: 0.32, vb: [0, 0, 100, 100], weight: 2, cycle: 0.3,
     line: "#c99400", css: EASTER_CSS, svg: chickSvg,
   },
+  // Pixel sizes match across the cast: 1.1 screen px per SVG unit at medium.
+  steve: {
+    theme: "minecraft", name: "Steve", motion: "walk",
+    scale: 0.352, vb: [0, -4, 80, 134], weight: 3, cycle: 0.4,
+    line: "none", css: MINECRAFT_CSS, svg: steveSvg,
+  },
+  creeper: {
+    theme: "minecraft", name: "Creeper", motion: "walk", flip: false,
+    scale: 0.282, vb: [0, -40, 64, 148], weight: 3, cycle: 0.3,
+    line: "none", css: MINECRAFT_CSS, event: SAY, svg: creeperSvg,
+  },
+  enderman: {
+    theme: "minecraft", name: "Enderman with a block", motion: "walk",
+    scale: 0.616, vb: [0, -12, 140, 206], weight: 2, cycle: 0.6,
+    line: "none", css: MINECRAFT_CSS, svg: endermanSvg,
+  },
+  mcskeleton: {
+    theme: "minecraft", name: "Skeleton archer", motion: "walk",
+    scale: 0.493, vb: [0, -4, 112, 134], weight: 2, cycle: 0.4,
+    line: "none", css: MINECRAFT_CSS, svg: mcSkeletonSvg,
+  },
+  denis: {
+    theme: "minecraft", name: "Denis the dog", motion: "walk",
+    scale: 0.44, vb: [0, -36, 100, 132], weight: 2, cycle: 0.3,
+    line: "none", css: MINECRAFT_CSS, event: SAY, svg: denisSvg,
+  },
+
   butterflies: {
     theme: "easter", name: "Butterflies", motion: "fly", bob: "gentle",
     scale: 0.85, vb: [0, 0, 220, 140], weight: 2, cycle: 0.5, tilt: 10, waves: [2, 3.5],

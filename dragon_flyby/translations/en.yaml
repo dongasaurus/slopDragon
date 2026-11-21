@@ -10,7 +10,7 @@ configuration:
     description: How long each flight lasts, 1 to 10 seconds. Default 5.
   theme:
     name: Theme
-    description: "dragons, christmas (sleigh, reindeer, elf, Santa-hat dragon), australianchristmas (kangaroo sleigh, surfing, cricket, air conditioner, Santa-hat dragon), halloween (witch, bats, ghost, skeleton, pumpkin), easter (bunny, chick, butterflies), or auto to follow the calendar."
+    description: "dragons, christmas (sleigh, reindeer, elf, Santa-hat dragon), australianchristmas (kangaroo sleigh, surfing, cricket, air conditioner, Santa-hat dragon), halloween (witch, bats, ghost, skeleton, pumpkin), easter (bunny, chick, butterflies), minecraft (Steve, creeper, enderman, skeleton, Denis the dog), or auto to follow the calendar."
   dragon:
     name: Dragon
     description: "Used by the dragons theme: random, shadow (Shadow Wing), spike (Spike Tail), ember (Ember Horn) or moon (Moon Glider)."

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0
+
+- New `minecraft` theme in blocky pixel art, all walking along the bottom of the screen: Steve with a diamond pickaxe, a creeper that flashes and hisses (it never explodes), an enderman carrying a grass block that blinks away mid-walk, a skeleton archer that fires an arrow, and Denis the dog.
+
 ## 1.4.0
 
 - Australian Christmas: Santa relaxes in a deckchair in front of an air conditioner, with icy wind and snowflakes ("Ahhh, bliss!").

@@ -163,6 +163,7 @@ const CAST = {
   australianchristmas: ["kangaroos", "surfing", "cricket", "aircon", "coolreindeer", "floatie", "xmasdragon"],
   halloween: ["witch", "bats", "ghost", "skeleton", "pumpkin"],
   easter: ["bunny", "chick", "butterflies"],
+  minecraft: ["steve", "creeper", "enderman", "mcskeleton", "denis"],
 };
 const character = (page) => page.locator("dragon-flyby-overlay").getAttribute("data-character");
 
@@ -185,7 +186,7 @@ test("every character renders and is cleaned up", async () => {
   await page.close();
 });
 
-for (const theme of ["christmas", "australianchristmas", "halloween", "easter"]) {
+for (const theme of ["christmas", "australianchristmas", "halloween", "easter", "minecraft"]) {
   test(`${theme} theme only sends ${theme} visitors`, async () => {
     const page = await open(`theme=${theme}&interval=1`);
     const seen = new Set();
@@ -201,7 +202,7 @@ for (const theme of ["christmas", "australianchristmas", "halloween", "easter"])
 
 test("walkers and hoppers cross along the bottom of the screen", async () => {
   const page = await open("", { clock: false });
-  for (const key of ["elf", "skeleton", "pumpkin", "bunny", "chick", "surfing", "cricket", "coolreindeer"]) {
+  for (const key of ["elf", "skeleton", "pumpkin", "bunny", "chick", "surfing", "cricket", "coolreindeer", "steve", "creeper", "enderman", "mcskeleton", "denis"]) {
     const bottom = await page.evaluate((k) => {
       window.dragonFlyby.stop();
       window.dragonFlyby.fly(k);

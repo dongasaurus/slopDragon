@@ -1,5 +1,5 @@
 name: Dragon Flyby
-version: "1.4.0"
+version: "1.5.0"
 slug: dragon_flyby
 description: A dragon (or Santa, a witch, the Easter bunny...) crosses your dashboard every few minutes.
 url: https://github.com/dongasaurus/slopDragon
@@ -26,7 +26,7 @@ schema:
   enabled: bool
   interval_minutes: int(1,1440)
   duration_seconds: float(1,10)
-  theme: list(dragons|christmas|australianchristmas|halloween|easter|auto)
+  theme: list(dragons|christmas|australianchristmas|halloween|easter|minecraft|auto)
   dragon: list(random|shadow|spike|ember|moon)
   size: list(small|medium|large)
   dashboards_only: bool
