@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Dragon Flyby test fixture</title></head>
+<body>
+<main id="dashboard"><button id="tap" style="width:100vw;height:100vh">tap</button></main>
+<script type="module">
+  // Everything after "?" is passed through to the dragon script.
+  const query = location.search.slice(1);
+  window.loaded = import(`../dragon_flyby/www/dragon-flyby.js${query ? `?${query}` : ""}`);
+</script>
+</body>
+</html>

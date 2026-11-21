@@ -1,0 +1,31 @@
+name: Dragon Flyby
+version: "1.0.0"
+slug: dragon_flyby
+description: An animated dragon swoops across your dashboard every few minutes.
+url: https://github.com/dongasaurus/slopDragon
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: once
+boot: auto
+homeassistant_api: true
+map:
+  - type: homeassistant_config
+    read_only: false
+options:
+  enabled: true
+  interval_minutes: 15
+  duration_seconds: 5
+  dragon: random
+  size: medium
+  dashboards_only: true
+  fly_on_load: false
+schema:
+  enabled: bool
+  interval_minutes: int(1,1440)
+  duration_seconds: float(1,5)
+  dragon: list(random|shadow|spike|ember|moon)
+  size: list(small|medium|large)
+  dashboards_only: bool
+  fly_on_load: bool

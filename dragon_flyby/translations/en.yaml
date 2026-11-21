@@ -1,0 +1,22 @@
+configuration:
+  enabled:
+    name: Enabled
+    description: Turn off and restart the add-on to remove the dragon from your dashboards.
+  interval_minutes:
+    name: Minutes between flights
+    description: How often a dragon flies across the screen (1-1440).
+  duration_seconds:
+    name: Seconds on screen
+    description: How long each flight lasts. Never more than 5 seconds.
+  dragon:
+    name: Dragon
+    description: "random, shadow (Shadow Wing), spike (Spike Tail), ember (Ember Horn) or moon (Moon Glider)."
+  size:
+    name: Size
+    description: How big the dragon is drawn.
+  dashboards_only:
+    name: Dashboards only
+    description: Only fly over dashboards, not over Settings or other pages.
+  fly_on_load:
+    name: Fly on page load
+    description: Also send a dragon a few seconds after a dashboard is opened.

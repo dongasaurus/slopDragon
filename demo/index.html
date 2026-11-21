@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dragon Flyby demo</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f2f4f7; --card: #fff; --text: #1c1f24; --muted: #5b6573; --accent: #03a9f4; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111317; --card: #1c1f25; --text: #e7eaee; --muted: #9aa4b2; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--accent); color: #fff; }
+  header h1 { font-size: 20px; margin: 0; font-weight: 500; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; padding: 16px; }
+  .card { background: var(--card); border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .card h2 { margin: 0 0 6px; font-size: 14px; color: var(--muted); font-weight: 500; }
+  .big { font-size: 30px; font-weight: 600; }
+  button { font: inherit; padding: 8px 12px; margin: 4px 4px 0 0; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+  .controls p { margin: 0 0 6px; color: var(--muted); }
+  #clicks { color: var(--muted); }
+</style>
+</head>
+<body>
+<header><h1>Home</h1></header>
+<main>
+  <div class="card controls">
+    <h2>Summon a dragon</h2>
+    <p>One also flies every 30 seconds on this page.</p>
+    <button data-kind="shadow">Shadow Wing</button>
+    <button data-kind="spike">Spike Tail</button>
+    <button data-kind="ember">Ember Horn</button>
+    <button data-kind="moon">Moon Glider</button>
+  </div>
+  <div class="card"><h2>Living room</h2><div class="big">21.5 °C</div></div>
+  <div class="card"><h2>Front door</h2><div class="big">Locked</div></div>
+  <div class="card"><h2>Kitchen lights</h2><div class="big">On</div></div>
+  <div class="card"><h2>Energy today</h2><div class="big">7.2 kWh</div></div>
+  <div class="card">
+    <h2>Click-through test</h2>
+    <button id="tap">Tap me while a dragon flies</button>
+    <div id="clicks">0 taps</div>
+  </div>
+</main>
+<script type="module">
+  // Serve the repo root (python3 -m http.server) and open /demo/.
+  await import("../dragon_flyby/www/dragon-flyby.js?interval=0.5&duration=5&dashboards=0&onload=1");
+  document.querySelectorAll("[data-kind]").forEach((b) =>
+    b.addEventListener("click", () => window.dragonFlyby.fly(b.dataset.kind)));
+  let taps = 0;
+  document.getElementById("tap").addEventListener("click", () => {
+    document.getElementById("clicks").textContent = `${++taps} taps`;
+  });
+</script>
+</body>
+</html>
