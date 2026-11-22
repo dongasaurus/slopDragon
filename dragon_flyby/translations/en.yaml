@@ -10,7 +10,7 @@ configuration:
     description: How long each visit lasts, 1 to 10 seconds. Default 5.
   theme:
     name: Theme
-    description: "dragons, christmas (sleigh, reindeer, elf, Santa-hat dragon), australianchristmas (kangaroo sleigh, surfing, cricket, air conditioner, Santa-hat dragon), halloween (witch, bats, ghost, skeleton, pumpkin), easter (bunny, chick, butterflies), minecraft (Steve, creeper, enderman, skeleton, Denis the dog), or auto to follow the calendar. To pick one specific dragon, turn on 'Show unused optional configuration options' below."
+    description: "Who visits: dragons, christmas, australianchristmas, halloween, easter, minecraft, weather, newyear, lunarnewyear, valentines, stpatricks, diadelosmuertos, diwali, eid, birthdays, or auto to follow the calendar. The Documentation tab lists who appears in each. To pick one specific dragon, turn on 'Show unused optional configuration options' below."
   unicorn_chance:
     name: Unicorn chance (%)
     description: Chance that a unicorn flies by instead of the usual visitor, in every theme. 0 turns it off, 25 is the most. Default 5.
@@ -26,3 +26,12 @@ configuration:
   fly_on_load:
     name: Visit on page load
     description: Also send a visitor a few seconds after a dashboard is opened.
+  weather_entity:
+    name: Weather entity
+    description: "Used by the weather theme. Your weather entity, for example weather.forecast_home, or weather.melbourne from the Bureau of Meteorology integration. Leave as auto to use the first weather entity found."
+  auto_holidays:
+    name: Holidays in auto
+    description: Which holidays the auto theme celebrates. Remove any you don't want.
+  birthdays:
+    name: Birthdays
+    description: "People to celebrate: a name, day and month, plus an optional birth year to show their age. On the day, birthday visitors join whatever theme is set."

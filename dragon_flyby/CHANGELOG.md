@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0
+
+- New `weather` theme: visitors match the weather outside, read from your own weather entity (`weather_entity`), for example the Bureau of Meteorology integration. Sun in sunnies, clouds, a duck with an umbrella, storm clouds, a kite, a snowman, a penguin, a night owl, and a melting ice cream when it's 35°C or hotter.
+- New holiday themes: `newyear`, `lunarnewyear`, `valentines`, `stpatricks`, `diadelosmuertos`, `diwali`, `eid` and `birthdays`.
+- `birthdays` option: add people with a name, day, month and optional birth year. On the day, birthday visitors say "Happy birthday" by name, in `auto` and mixed into every other theme.
+- `auto` now follows all of these holidays. Moving dates (Lunar New Year, Diwali, Eid, Easter) are calculated, so they stay right every year. New `auto_holidays` option to choose which ones it uses.
+
 ## 1.6.0
 
 - A unicorn with a rainbow trail can now turn up in every theme. New `unicorn_chance` option: 5% by default, 0 (off) to 25%.

@@ -44,7 +44,8 @@
 </main>
 <script type="module">
   // Serve the repo root (python3 -m http.server) and open /demo/.
-  await import("../dragon_flyby/www/dragon-flyby.js?interval=0.5&duration=5&theme=auto&dashboards=0&onload=1");
+  // No Home Assistant here, so the weather theme gets a fixed condition.
+  await import("../dragon_flyby/www/dragon-flyby.js?interval=0.5&duration=5&theme=auto&dashboards=0&onload=1&weather=partlycloudy");
   const flyby = window.dragonFlyby;
   const add = (parent, label, value, cls = "") => {
     const b = document.createElement("button");

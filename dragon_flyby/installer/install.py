@@ -34,6 +34,10 @@ FOLDER = "dragon-flyby"
 FILENAME = "dragon-flyby.js"
 URL_PATH = f"/local/{FOLDER}/{FILENAME}"
 MAX_DURATION = 10
+HOLIDAYS = [
+    "birthdays", "newyear", "valentines", "stpatricks", "lunarnewyear", "diwali",
+    "eid", "diadelosmuertos", "easter", "halloween", "christmas",
+]
 
 DEFAULTS = {
     "enabled": True,
@@ -45,6 +49,9 @@ DEFAULTS = {
     "size": "medium",
     "dashboards_only": True,
     "fly_on_load": False,
+    "weather_entity": "auto",
+    "auto_holidays": list(HOLIDAYS),
+    "birthdays": [],
 }
 
 
@@ -72,7 +79,33 @@ def load_options() -> dict:
     options["unicorn_chance"] = min(25, max(0, int(options["unicorn_chance"])))
     # "dragon" is optional in the add-on settings and may be missing or null.
     options["dragon"] = options.get("dragon") or "random"
+    options["weather_entity"] = str(options.get("weather_entity") or "auto").strip() or "auto"
+    options["auto_holidays"] = [h for h in options.get("auto_holidays") or [] if h in HOLIDAYS]
+    options["birthdays"] = clean_birthdays(options.get("birthdays"))
     return options
+
+
+def clean_birthdays(entries) -> list[dict]:
+    """Keep birthdays with a name and a valid day and month."""
+    people = []
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "").strip()[:40]
+        try:
+            day, month = int(entry.get("day")), int(entry.get("month"))
+        except (TypeError, ValueError):
+            continue
+        if not name or not 1 <= day <= 31 or not 1 <= month <= 12:
+            continue
+        person = {"name": name, "day": day, "month": month}
+        try:
+            if entry.get("year"):
+                person["year"] = int(entry["year"])
+        except (TypeError, ValueError):
+            pass
+        people.append(person)
+    return people
 
 
 def resource_url(options: dict, digest: str) -> str:
@@ -86,8 +119,12 @@ def resource_url(options: dict, digest: str) -> str:
         "size": options["size"],
         "dashboards": int(bool(options["dashboards_only"])),
         "onload": int(bool(options["fly_on_load"])),
-        "v": digest,
+        "weather": options["weather_entity"],
+        "holidays": ",".join(options["auto_holidays"]),
     }
+    if options["birthdays"]:
+        query["birthdays"] = json.dumps(options["birthdays"], separators=(",", ":"), ensure_ascii=False)
+    query["v"] = digest
     return f"{URL_PATH}?{urlencode(query)}"
 
 

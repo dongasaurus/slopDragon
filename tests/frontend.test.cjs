@@ -165,6 +165,15 @@ const CAST = {
   halloween: ["witch", "bats", "ghost", "skeleton", "pumpkin"],
   easter: ["bunny", "chick", "butterflies"],
   minecraft: ["steve", "creeper", "enderman", "mcskeleton", "denis"],
+  weather: ["sun", "cloud", "raincloud", "stormcloud", "duck", "kite", "snowman", "penguin", "owl", "icecream"],
+  newyear: ["fireworks", "bannerplane", "partydragon"],
+  lunarnewyear: ["liondance", "paradedragon", "lanterns"],
+  valentines: ["cupid", "hearts", "lovebirds"],
+  stpatricks: ["leprechaun", "shamrocks", "rainbowgold"],
+  diadelosmuertos: ["calavera", "monarchs", "marigolds"],
+  diwali: ["diyas", "rangoli", "fireworks"],
+  eid: ["crescent", "fanous"],
+  birthdays: ["balloons", "cake", "bannerplane", "partydragon"],
 };
 const character = (page) => page.locator("dragon-flyby-overlay").getAttribute("data-character");
 
@@ -187,7 +196,8 @@ test("every character renders and is cleaned up", async () => {
   await page.close();
 });
 
-for (const theme of ["christmas", "australianchristmas", "halloween", "easter", "minecraft"]) {
+for (const theme of ["christmas", "australianchristmas", "halloween", "easter", "minecraft", "newyear",
+  "lunarnewyear", "valentines", "stpatricks", "diadelosmuertos", "diwali", "eid", "birthdays"]) {
   test(`${theme} theme only sends ${theme} visitors`, async () => {
     const page = await open(`theme=${theme}&interval=1&unicorn=0`);
     const seen = new Set();
@@ -196,14 +206,16 @@ for (const theme of ["christmas", "australianchristmas", "halloween", "easter", 
       seen.add(await character(page));
     }
     for (const key of seen) assert.ok(CAST[theme].includes(key), `${key} belongs to ${theme}`);
-    assert.ok(seen.size >= 2, `more than one ${theme} character shows up`);
+    assert.ok(seen.size >= Math.min(2, CAST[theme].length), `more than one ${theme} character shows up`);
     await page.close();
   });
 }
 
 test("walkers and hoppers cross along the bottom of the screen", async () => {
   const page = await open("", { clock: false });
-  for (const key of ["elf", "skeleton", "pumpkin", "bunny", "chick", "surfing", "cricket", "coolreindeer", "steve", "creeper", "enderman", "mcskeleton", "denis"]) {
+  for (const key of ["elf", "skeleton", "pumpkin", "bunny", "chick", "surfing", "cricket", "coolreindeer", "steve",
+    "creeper", "enderman", "mcskeleton", "denis", "duck", "snowman", "penguin", "icecream", "liondance", "leprechaun",
+    "calavera", "cake"]) {
     const bottom = await page.evaluate((k) => {
       window.dragonFlyby.stop();
       window.dragonFlyby.fly(k);
@@ -224,6 +236,23 @@ test("auto theme follows the calendar", async () => {
     ["2026-04-06T12:00:00", "easter"], // Easter Monday
     ["2026-04-07T12:00:00", "dragons"],
     ["2027-03-28T12:00:00", "easter"], // Easter Sunday 2027
+    ["2026-12-31T12:00:00", "newyear"],
+    ["2027-01-01T12:00:00", "newyear"],
+    ["2027-01-02T12:00:00", "dragons"],
+    ["2026-02-13T12:00:00", "valentines"],
+    ["2026-02-16T12:00:00", "lunarnewyear"], // eve of Lunar New Year (17 Feb 2026)
+    ["2026-02-23T12:00:00", "lunarnewyear"],
+    ["2026-02-24T12:00:00", "dragons"],
+    ["2034-02-19T12:00:00", "lunarnewyear"], // a leap-month year
+    ["2026-03-17T12:00:00", "stpatricks"],
+    ["2026-03-20T12:00:00", "eid"], // Eid al-Fitr 2026
+    ["2026-05-27T12:00:00", "eid"], // Eid al-Adha 2026
+    ["2026-11-02T12:00:00", "diadelosmuertos"],
+    ["2026-11-08T12:00:00", "diwali"],
+    ["2026-11-10T12:00:00", "diwali"],
+    ["2026-11-11T12:00:00", "dragons"],
+    ["2027-10-29T12:00:00", "diwali"], // wins over Halloween month
+    ["2031-11-14T12:00:00", "diwali"],
   ];
   for (const [date, expected] of cases) {
     const page = await open("theme=auto&interval=1&unicorn=0", { time: new Date(date).getTime() });
@@ -322,4 +351,165 @@ test("extra large size draws visitors bigger than large", async () => {
   const xl = await width("extralarge");
   assert.equal(large, 350);
   assert.ok(xl > large, `extralarge (${xl}) is bigger than large (${large})`);
+});
+
+// A fake Home Assistant with the given entity states (and sun position).
+async function withStates(page, states) {
+  await page.evaluate((states) => {
+    let ha = document.querySelector("home-assistant");
+    if (!ha) {
+      ha = document.createElement("home-assistant");
+      document.body.append(ha);
+    }
+    ha.hass = { panels: {}, config: { country: "GB" }, states };
+  }, states);
+}
+const entity = (state, attributes = {}) => ({ state, attributes });
+const day = entity("above_horizon");
+const night = entity("below_horizon");
+
+async function visitors(page, n = 10) {
+  const seen = [];
+  for (let i = 0; i < n; i++) {
+    await page.clock.runFor(60 * 1000);
+    seen.push(await character(page));
+  }
+  return seen;
+}
+
+test("weather theme reads your own weather entity (like the Bureau of Meteorology one)", async () => {
+  const page = await open("theme=weather&weather=weather.melbourne&interval=1&unicorn=0");
+  await withStates(page, {
+    "weather.melbourne": entity("rainy", { temperature: 18, temperature_unit: "°C" }),
+    "weather.forecast_home": entity("sunny", { temperature: 30, temperature_unit: "°C" }),
+    "sun.sun": day,
+  });
+  const weather = await page.evaluate(() => window.dragonFlyby.weather());
+  assert.equal(weather.entity, "weather.melbourne");
+  assert.equal(weather.condition, "rainy");
+  for (const k of await visitors(page)) assert.ok(["duck", "raincloud"].includes(k), `${k} fits rain`);
+  await page.close();
+});
+
+test("weather theme swaps sun and owl by the sun's position", async () => {
+  const page = await open("theme=weather&weather=weather.melbourne&interval=1&unicorn=0");
+  // The Bureau of Meteorology integration reports today's forecast all day.
+  await withStates(page, { "weather.melbourne": entity("sunny"), "sun.sun": night });
+  assert.deepEqual([...new Set(await visitors(page, 3))], ["owl"]);
+  await withStates(page, { "weather.melbourne": entity("clear-night"), "sun.sun": day });
+  assert.deepEqual([...new Set(await visitors(page, 3))], ["sun"]);
+  await page.close();
+});
+
+test("hot days bring a melting ice cream that tells you the temperature", async () => {
+  const page = await open("theme=weather&weather=weather.melbourne&interval=1&unicorn=0");
+  await withStates(page, { "weather.melbourne": entity("sunny", { temperature: 38.4, temperature_unit: "°C" }), "sun.sun": day });
+  const seen = await visitors(page, 16);
+  assert.ok(seen.includes("icecream"), "ice cream appears");
+  assert.ok(seen.every((k) => ["sun", "icecream"].includes(k)));
+  await page.evaluate(() => { window.dragonFlyby.stop(); window.dragonFlyby.fly("icecream"); });
+  const text = await page.evaluate(() => document.querySelector("dragon-flyby-overlay").shadowRoot.querySelector("text").textContent);
+  assert.equal(text, "Phew, 38°!");
+  await page.close();
+});
+
+test("weather words from a text sensor are understood", async () => {
+  const page = await open("theme=weather&weather=sensor.melbourne_short_text_0&interval=1&unicorn=0");
+  await withStates(page, { "sensor.melbourne_short_text_0": entity("Possible shower."), "sun.sun": day });
+  assert.equal((await page.evaluate(() => window.dragonFlyby.weather())).condition, "rainy");
+  await withStates(page, { "sensor.melbourne_short_text_0": entity("Snow developing."), "sun.sun": day });
+  for (const k of await visitors(page, 4)) assert.ok(["snowman", "penguin"].includes(k), `${k} fits snow`);
+  await page.close();
+});
+
+test("weather entity is found automatically, and dragons stand in without one", async () => {
+  let page = await open("theme=weather&interval=1&unicorn=0");
+  await withStates(page, {
+    "weather.home_hourly": entity("sunny"),
+    "weather.home": entity("windy"),
+    "sun.sun": day,
+  });
+  const weather = await page.evaluate(() => window.dragonFlyby.weather());
+  assert.equal(weather.entity, "weather.home");
+  assert.deepEqual([...new Set(await visitors(page, 3))], ["kite"]);
+  await page.close();
+
+  page = await open("theme=weather&interval=1&unicorn=0");
+  await withStates(page, { "sun.sun": day });
+  for (const k of await visitors(page, 3)) assert.ok(CAST.dragons.includes(k), `${k} is a dragon`);
+  await page.close();
+});
+
+test("birthdays: named greetings, auto takes over, other themes join in", async () => {
+  const birthdays = encodeURIComponent(JSON.stringify([
+    { name: "Mia", day: 12, month: 3, year: 2019 },
+    { name: "<b>Sam</b>", day: 4, month: 11 },
+  ]));
+  let page = await open(`theme=auto&interval=1&unicorn=0&birthdays=${birthdays}`, { time: new Date("2026-03-12T09:00:00").getTime() });
+  assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), "birthdays");
+  await page.evaluate(() => window.dragonFlyby.fly("balloons"));
+  assert.equal(await page.evaluate(() => document.querySelector("dragon-flyby-overlay").shadowRoot.querySelector("text").textContent),
+    "Happy 7th birthday, Mia!");
+  await page.close();
+
+  // Names are shown as text, never as HTML.
+  page = await open(`theme=birthdays&birthdays=${birthdays}`, { time: new Date("2026-11-04T09:00:00").getTime() });
+  const markup = await page.evaluate(() => {
+    window.dragonFlyby.fly("cake");
+    const root = document.querySelector("dragon-flyby-overlay").shadowRoot;
+    return { text: root.querySelector("text").textContent, bold: root.querySelectorAll("b").length };
+  });
+  assert.equal(markup.text, "Happy birthday, <b>Sam</b>!");
+  assert.equal(markup.bold, 0);
+  await page.close();
+
+  // In any other theme, about half the visits on the day are birthday visitors.
+  page = await open(`theme=minecraft&interval=1&unicorn=0&birthdays=${birthdays}`, { time: new Date("2026-03-12T09:00:00").getTime() });
+  const seen = await visitors(page, 30);
+  assert.ok(seen.some((k) => CAST.birthdays.includes(k)), "birthday visitors join in");
+  assert.ok(seen.some((k) => CAST.minecraft.includes(k)), "the theme still shows up");
+  await page.close();
+
+  // Without birthdays in the auto list, the day is ordinary.
+  page = await open(`theme=auto&holidays=halloween&birthdays=${birthdays}`, { time: new Date("2026-03-12T09:00:00").getTime() });
+  assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), "dragons");
+  await page.close();
+});
+
+test("auto only uses the holidays you keep", async () => {
+  const xmas = new Date("2026-12-25T12:00:00").getTime();
+  let page = await open("theme=auto&holidays=halloween,diwali", { time: xmas });
+  assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), "dragons");
+  await page.close();
+  page = await open("theme=auto&holidays=", { time: new Date("2026-10-15T12:00:00").getTime() });
+  assert.equal(await page.evaluate(() => window.dragonFlyby.theme()), "dragons");
+  await page.close();
+});
+
+test("New Year banner names the coming year", async () => {
+  const page = await open("", { time: new Date("2026-12-31T20:00:00").getTime() });
+  const text = await page.evaluate(() => {
+    window.dragonFlyby.fly("bannerplane");
+    return document.querySelector("dragon-flyby-overlay").shadowRoot.querySelector("text").textContent;
+  });
+  assert.equal(text, "Happy New Year 2027!");
+  await page.close();
+});
+
+test("fireworks appear in one spot and fade out", async () => {
+  const page = await open("", { clock: false });
+  const spots = await page.evaluate(async () => {
+    window.dragonFlyby.fly("fireworks");
+    const flight = document.querySelector("dragon-flyby-overlay").shadowRoot.querySelector(".flight");
+    const at = () => {
+      const r = flight.getBoundingClientRect();
+      return [Math.round(r.x), Math.round(r.y), getComputedStyle(flight).opacity];
+    };
+    const first = (await new Promise((r) => setTimeout(r, 1500)), at());
+    const second = (await new Promise((r) => setTimeout(r, 1500)), at());
+    return [first, second];
+  });
+  assert.deepEqual(spots[0].slice(0, 2), spots[1].slice(0, 2), "does not travel");
+  assert.equal(spots[0][2], "1");
+  await page.close();
 });

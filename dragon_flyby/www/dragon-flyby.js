@@ -17,30 +17,39 @@
  *
  *   interval    minutes between visits                        (default 15)
  *   duration    seconds on screen, 1 to 10                    (default 5)
- *   theme       dragons | christmas | australianchristmas | halloween |
- *               easter | minecraft | auto                     (default dragons)
+ *   theme       dragons | christmas | australianchristmas | halloween | easter |
+ *               minecraft | weather | newyear | lunarnewyear | valentines |
+ *               stpatricks | diadelosmuertos | diwali | eid | birthdays |
+ *               auto                                          (default dragons)
  *   dragon      random | shadow | spike | ember | moon        (default random)
  *   unicorn     % chance a unicorn comes instead, 0 to 25     (default 5)
  *   size        small | medium | large | extralarge           (default medium)
+ *   weather     weather entity for the weather theme, or auto (default auto)
+ *   holidays    comma-separated holidays that auto uses       (default all)
+ *   birthdays   JSON list of {name, day, month, year}         (default none)
  *   dashboards  1 = only show on dashboards                   (default 1)
  *   onload      1 = also show a few seconds after load        (default 0)
  *
- * "auto" picks the theme from the date: Halloween in October, Christmas in
- * December (the Australian summer Christmas when Home Assistant is set to
- * Australia), Easter from a week before Easter Sunday to Easter Monday, and
- * dragons the rest of the year.
+ * "auto" follows the calendar (see HOLIDAYS for the order), with dragons the
+ * rest of the year. On someone's birthday, birthday visitors also join
+ * whatever theme is set.
  *
  * From the browser console:
  *   dragonFlyby.fly()             - a visitor from the current theme
  *   dragonFlyby.fly("halloween")  - a random visitor from a theme
  *   dragonFlyby.fly("sleigh")     - a specific visitor (see dragonFlyby.characters)
+ *   dragonFlyby.weather()         - what the weather theme sees right now
+ *   dragonFlyby.holiday()         - which holiday auto would pick today
  */
 
-const VERSION = "1.6.0";
+const VERSION = "1.7.0";
 const DEFAULT_DURATION_S = 5;
 const MAX_DURATION_S = 10;
 const SIZES = { small: 170, medium: 250, large: 350, extralarge: 480 };
-const THEMES = ["dragons", "christmas", "australianchristmas", "halloween", "easter", "minecraft"];
+const THEMES = [
+  "dragons", "christmas", "australianchristmas", "halloween", "easter", "minecraft", "weather",
+  "newyear", "lunarnewyear", "valentines", "stpatricks", "diadelosmuertos", "diwali", "eid", "birthdays",
+];
 
 // Wing, tail and head pivots in SVG viewBox units (viewBox 0 -40 320 240).
 const SHOULDER = "172px 97px";
@@ -117,14 +126,49 @@ function readConfig(url) {
     dragon: pick("dragon", "random", ["random", ...Object.keys(DRAGONS)]),
     unicorn: num("unicorn", 5, 0, 25), // percent
     size: pick("size", "medium", Object.keys(SIZES)),
+    weather: (params.get("weather") || "").trim() || "auto",
+    holidays: params.has("holidays")
+      ? params.get("holidays").split(",").map((h) => h.trim().toLowerCase()).filter((h) => HOLIDAYS.includes(h))
+      : [...HOLIDAYS],
+    birthdays: parseBirthdays(params.get("birthdays")),
     dashboardsOnly: bool("dashboards", true),
     flyOnLoad: bool("onload", false),
   };
 }
 
+// Birthdays arrive as JSON: [{"name": "Mia", "day": 12, "month": 3, "year": 2019}].
+function parseBirthdays(json) {
+  let list;
+  try {
+    list = JSON.parse(json || "[]");
+  } catch (_err) {
+    return [];
+  }
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((b) => ({
+      name: String(b?.name ?? "").trim().slice(0, 40),
+      day: Number.parseInt(b?.day, 10),
+      month: Number.parseInt(b?.month, 10),
+      year: Number.parseInt(b?.year, 10) || null,
+    }))
+    .filter((b) => b.name && b.day >= 1 && b.day <= 31 && b.month >= 1 && b.month <= 12);
+}
+
 /* ------------------------------------------------------------------------ */
-/* Seasons                                                                  */
+/* Calendar                                                                 */
 /* ------------------------------------------------------------------------ */
+// Holidays that move each year are calculated, so there is no table to go
+// stale: Easter by the Gregorian computus, Lunar New Year and Diwali from the
+// moon (Meeus, "Astronomical Algorithms"), and Eid from the browser's Islamic
+// (Umm al-Qura) calendar. Local moon sightings can shift Eid by a day.
+
+const DAY_MS = 86400000;
+const HOUR_MS = 3600000;
+
+// Calendar date of a local Date, as a whole day number (DST-proof).
+const dayNumber = (date) => Math.round(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS);
+const ymdNumber = (y, m, d) => Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
 
 // Easter Sunday (Gregorian calendar), anonymous Gregorian algorithm.
 function easterSunday(year) {
@@ -142,8 +186,147 @@ function easterSunday(year) {
   const m = Math.floor((a + 11 * h + 22 * l) / 451);
   const month = Math.floor((h + l - 7 * m + 114) / 31);
   const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(year, month - 1, day);
+  return ymdNumber(year, month, day);
 }
+
+// Instant (ms) of the k-th new moon after January 2000 (Meeus chapter 49).
+function newMoon(k) {
+  const T = k / 1236.85;
+  const T2 = T * T;
+  const rad = Math.PI / 180;
+  const E = 1 - 0.002516 * T - 0.0000074 * T2;
+  const M = (2.5534 + 29.1053567 * k - 0.0000014 * T2) * rad;
+  const Mp = (201.5643 + 385.81693528 * k + 0.0107582 * T2 + 0.00001238 * T2 * T) * rad;
+  const F = (160.7108 + 390.67050284 * k - 0.0016118 * T2 - 0.00000227 * T2 * T) * rad;
+  const O = (124.7746 - 1.56375588 * k + 0.0020672 * T2) * rad;
+  const jde = 2451550.09766 + 29.530588861 * k + 0.00015437 * T2
+    - 0.4072 * Math.sin(Mp) + 0.17241 * E * Math.sin(M) + 0.01608 * Math.sin(2 * Mp)
+    + 0.01039 * Math.sin(2 * F) + 0.00739 * E * Math.sin(Mp - M) - 0.00514 * E * Math.sin(Mp + M)
+    + 0.00208 * E * E * Math.sin(2 * M) - 0.00111 * Math.sin(Mp - 2 * F) - 0.00057 * Math.sin(Mp + 2 * F)
+    + 0.00056 * E * Math.sin(2 * Mp + M) - 0.00042 * Math.sin(3 * Mp) + 0.00042 * E * Math.sin(M + 2 * F)
+    + 0.00038 * E * Math.sin(M - 2 * F) - 0.00024 * E * Math.sin(2 * Mp - M) - 0.00017 * Math.sin(O);
+  return (jde - 2440587.5) * DAY_MS;
+}
+
+function newMoonsBetween(startMs, endMs) {
+  const moons = [];
+  let k = Math.floor((startMs / DAY_MS + 2440587.5 - 2451550.09766) / 29.530588861) - 1;
+  for (let t = newMoon(k); t <= endMs; t = newMoon(++k)) if (t >= startMs) moons.push(t);
+  return moons;
+}
+
+// Day number of an instant's calendar date in a fixed time zone (hours).
+const zoneDay = (ms, offsetHours) => Math.floor((ms + offsetHours * HOUR_MS) / DAY_MS);
+
+const yearly = new Map();
+const perYear = (name, year, calc) => {
+  const key = `${name}${year}`;
+  if (!yearly.has(key)) yearly.set(key, calc(year));
+  return yearly.get(key);
+};
+
+// Lunar New Year: the first new moon on or after 21 January, China time.
+const lunarNewYear = (year) => perYear("lny", year, (y) =>
+  zoneDay(newMoonsBetween(Date.UTC(y, 0, 20, 16), Date.UTC(y, 2, 1))[0], 8));
+
+// Diwali (Lakshmi Puja): the new moon while the sun is in sidereal Libra,
+// celebrated on the evening (India time) that falls in its amavasya.
+function sunSiderealLongitude(ms) {
+  const n = ms / DAY_MS + 2440587.5 - 2451545.0;
+  const g = ((357.528 + 0.9856003 * n) * Math.PI) / 180;
+  const tropical = 280.46 + 0.9856474 * n + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g);
+  const ayanamsa = 23.853 + 0.013969 * ((ms / DAY_MS - 10957.5) / 365.25);
+  return (((tropical - ayanamsa) % 360) + 360) % 360;
+}
+
+const diwali = (year) => perYear("diwali", year, (y) => {
+  const moon = newMoonsBetween(Date.UTC(y, 8, 25), Date.UTC(y, 11, 5))
+    .find((t) => sunSiderealLongitude(t) >= 180 && sunSiderealLongitude(t) < 210);
+  const tithiStart = moon - 23.6 * HOUR_MS;
+  let best = 0;
+  let bestOverlap = -Infinity;
+  for (let d = zoneDay(moon, 5.5) - 2; d <= zoneDay(moon, 5.5) + 1; d++) {
+    const midnight = d * DAY_MS - 5.5 * HOUR_MS;
+    const overlap = Math.min(midnight + 20.25 * HOUR_MS, moon) - Math.max(midnight + 17.75 * HOUR_MS, tithiStart);
+    if (overlap > bestOverlap) [best, bestOverlap] = [d, overlap];
+  }
+  return best;
+});
+
+// Islamic date (month, day) of a calendar day.
+let islamicFormat;
+function islamicDate(day) {
+  if (islamicFormat === undefined) {
+    try {
+      const f = new Intl.DateTimeFormat("en-u-ca-islamic-umalqura", { day: "numeric", month: "numeric", timeZone: "UTC" });
+      islamicFormat = f.resolvedOptions().calendar === "islamic-umalqura" ? f : null;
+    } catch (_err) {
+      islamicFormat = null;
+    }
+  }
+  if (islamicFormat) {
+    const parts = islamicFormat.formatToParts(new Date(day * DAY_MS + 12 * HOUR_MS));
+    const get = (type) => Number.parseInt(parts.find((p) => p.type === type)?.value, 10);
+    return { month: get("month"), day: get("day") };
+  }
+  // Tabular Islamic calendar: within a day of Umm al-Qura.
+  let l = day + 2440588 - 1948440 + 10632;
+  const n = Math.floor((l - 1) / 10631);
+  l = l - 10631 * n + 354;
+  const j = Math.floor((10985 - l) / 5316) * Math.floor((50 * l) / 17719)
+    + Math.floor(l / 5670) * Math.floor((43 * l) / 15238);
+  l = l - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50)
+    - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
+  const month = Math.floor((24 * l) / 709);
+  return { month, day: l - Math.floor((709 * month) / 24) };
+}
+
+function birthdaysOn(date, birthdays) {
+  return birthdays.filter((b) => b.day === date.getDate() && b.month === date.getMonth() + 1);
+}
+
+const ordinal = (n) => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+};
+
+function birthdayMessage(date, birthdays) {
+  const today = birthdaysOn(date, birthdays);
+  if (!today.length) return "Happy birthday!";
+  if (today.length === 1) {
+    const [b] = today;
+    const age = b.year ? date.getFullYear() - b.year : 0;
+    return age > 0 && age < 130 ? `Happy ${ordinal(age)} birthday, ${b.name}!` : `Happy birthday, ${b.name}!`;
+  }
+  const names = today.map((b) => b.name);
+  return `Happy birthday, ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}!`;
+}
+
+// Auto holidays in priority order: the first one that matches today wins.
+const HOLIDAYS = [
+  "birthdays", "newyear", "valentines", "stpatricks", "lunarnewyear", "diwali",
+  "eid", "diadelosmuertos", "easter", "halloween", "christmas",
+];
+
+const within = (day, centre, before, after) => day >= centre - before && day <= centre + after;
+
+const HOLIDAY_TESTS = {
+  birthdays: (date, cfg) => birthdaysOn(date, cfg.birthdays).length > 0,
+  newyear: (date) => (date.getMonth() === 11 && date.getDate() === 31) || (date.getMonth() === 0 && date.getDate() === 1),
+  valentines: (date) => date.getMonth() === 1 && date.getDate() >= 12 && date.getDate() <= 14,
+  stpatricks: (date) => date.getMonth() === 2 && date.getDate() >= 15 && date.getDate() <= 17,
+  lunarnewyear: (date) => within(dayNumber(date), lunarNewYear(date.getFullYear()), 1, 6),
+  diwali: (date) => within(dayNumber(date), diwali(date.getFullYear()), 2, 2),
+  eid: (date) => {
+    const { month, day } = islamicDate(dayNumber(date));
+    return (month === 10 && day <= 3) || (month === 12 && day >= 9 && day <= 13);
+  },
+  diadelosmuertos: (date) => date.getMonth() === 10 && date.getDate() <= 2,
+  easter: (date) => within(dayNumber(date), easterSunday(date.getFullYear()), 7, 1),
+  halloween: (date) => date.getMonth() === 9,
+  christmas: (date) => date.getMonth() === 11,
+};
 
 // Home Assistant's country setting, else its time zone, else the browser's.
 function inAustralia() {
@@ -160,16 +343,10 @@ function inAustralia() {
   return /^Australia\//.test(zone || "");
 }
 
-function seasonFor(date, australia = false) {
-  const month = date.getMonth();
-  if (month === 9) return "halloween";
-  if (month === 11) return australia ? "australianchristmas" : "christmas";
-  const day = new Date(date.getFullYear(), month, date.getDate());
-  const easter = easterSunday(date.getFullYear());
-  const from = new Date(easter.getFullYear(), easter.getMonth(), easter.getDate() - 7);
-  const to = new Date(easter.getFullYear(), easter.getMonth(), easter.getDate() + 1);
-  if (day >= from && day <= to) return "easter";
-  return "dragons";
+function holidayOn(date, cfg) {
+  const key = HOLIDAYS.find((h) => cfg.holidays.includes(h) && HOLIDAY_TESTS[h](date, cfg));
+  if (key === "christmas" && inAustralia()) return "australianchristmas";
+  return key || null;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -269,7 +446,7 @@ const SANTA_HAT = `
     <rect fill="#ffffff" x="236" y="64" width="35" height="9" rx="4.5" transform="rotate(-6 253 68)"/>
     <circle fill="#ffffff" cx="209" cy="41" r="6"/>`;
 
-function dragonSvg(d, { santaHat = false } = {}) {
+function dragonSvg(d, { santaHat = false, partyHat = false, blast: breath = true, say = "" } = {}) {
   return `
 <svg class="dragon" viewBox="0 -40 320 240" xmlns="http://www.w3.org/2000/svg">
   <g class="wing wing-far"><g transform="${grow(WING_SCALE * 0.95)} translate(-14 -4)">
@@ -295,7 +472,7 @@ function dragonSvg(d, { santaHat = false } = {}) {
     <path fill="${d.body}" d="${NECK_PATH}"/>
     <g fill="${d.head === "ears" ? d.shade : d.accent}">${headGear(d)}</g>
     <path fill="${d.body}" d="${HEAD_PATH}"/>
-    <path fill="${d.shade}" opacity="0.55" d="M242 75 C250 70 262 71 266 77 C258 74 250 74 242 79 Z"/>${santaHat ? SANTA_HAT : ""}
+    <path fill="${d.shade}" opacity="0.55" d="M242 75 C250 70 262 71 266 77 C258 74 250 74 242 79 Z"/>${santaHat ? SANTA_HAT : ""}${partyHat ? PARTY_HAT : ""}
     <path class="jaw" d="${JAW_PATH}"/>
     <circle fill="${d.shade}" cx="276" cy="84" r="1.6"/>
     <ellipse fill="${d.eye}" cx="254" cy="84" rx="7.5" ry="7"/>
@@ -306,7 +483,8 @@ function dragonSvg(d, { santaHat = false } = {}) {
     <path fill="${d.wing}" d="${WING_PATH}"/>
     <path class="bones" stroke="${d.bone}" d="${WING_BONES}"/>
   </g></g>
-  <g transform="translate(${MOUTH[0]} ${MOUTH[1]})"><g class="blast">${blast(d)}</g></g>
+  ${breath ? `<g transform="translate(${MOUTH[0]} ${MOUTH[1]})"><g class="blast">${blast(d)}</g></g>` : ""}
+  ${say ? speechFor(226, -40, say, "#4a148c") : ""}
 </svg>`;
 }
 
@@ -332,9 +510,17 @@ function speech(x, y, width, text, color) {
   const bottom = y + 30;
   return `<g class="say"><g class="pop">
     <path fill="#ffffff" style="stroke:#c3c9d2;stroke-width:1.2" d="M${x + 15} ${y} H${right} A15 15 0 0 1 ${right} ${bottom} H${cx - 4} L${cx - 16} ${y + 40} L${cx - 14} ${bottom} H${x + 15} A15 15 0 0 1 ${x + 15} ${y} Z"/>
-    <text x="${cx}" y="${y + 21}" text-anchor="middle" font-size="18" font-weight="800" fill="${color}">${text}</text>
+    <text x="${cx}" y="${y + 21}" text-anchor="middle" font-size="18" font-weight="800" fill="${color}">${esc(text)}</text>
   </g></g>`;
 }
+
+const esc = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+// Speech bubble sized to its text, centred on cx.
+const speechFor = (cx, y, text, color) => {
+  const width = Math.max(64, Math.round(String(text).length * 10.4 + 30));
+  return speech(Math.round(cx - width / 2), y, width, text, color);
+};
 
 /* ---- Christmas ---------------------------------------------------------- */
 
@@ -875,6 +1061,14 @@ function butterfliesSvg() {
   </svg>`;
 }
 
+function monarchsSvg() {
+  return `${svgOpen("monarchs", [0, 0, 220, 140])}
+    ${butterfly(56, 56, 1, "#ff9800", "#f57c00", 0)}
+    ${butterfly(132, 98, 0.8, "#ffa726", "#ef6c00", -0.25)}
+    ${butterfly(184, 38, 0.7, "#fb8c00", "#e65100", -0.45)}
+  </svg>`;
+}
+
 const EASTER_CSS = `
 .ear { transform-box: fill-box; transform-origin: 50% 100%; animation: ear-flop var(--cycle) ease-in-out infinite; }
 .ear-far { animation-delay: -0.05s; }
@@ -1139,6 +1333,686 @@ const UNICORN_CSS = `
 @keyframes flutter { 0%, 100% { transform: skewY(0deg) scaleX(1); } 50% { transform: skewY(-7deg) scaleX(1.07); } }
 `;
 
+/* ---- Weather ------------------------------------------------------------ */
+
+function sunSvg() {
+  const rays = Array.from({ length: 12 }, (_, i) =>
+    `<path fill="#ffb300" transform="rotate(${i * 30})" d="M-7 -41 L0 ${i % 2 ? -56 : -64} L7 -41 Z"/>`).join("");
+  return `${svgOpen("sun", [-70, -70, 140, 140])}
+    <g class="spin-slow">${rays}</g>
+    <circle fill="#ffd54f" r="40"/>
+    <circle class="ns" fill="#fff3c4" opacity="0.6" cx="-14" cy="-16" r="12"/>
+    <path fill="#263238" d="M-31 -11 L-4 -11 L-6 1 C-8 8 -25 8 -28 1 Z M4 -11 L31 -11 L28 1 C25 8 8 8 6 1 Z"/>
+    <path class="ln" style="stroke:#263238;stroke-width:3" d="M-5 -9 L5 -9"/>
+    <path class="ln" style="stroke:#90caf9;stroke-width:1.6" d="M-25 -7 L-19 -7 M10 -7 L16 -7"/>
+    <circle class="ns" fill="#ff8a65" opacity="0.55" cx="-25" cy="13" r="6"/><circle class="ns" fill="#ff8a65" opacity="0.55" cx="25" cy="13" r="6"/>
+    <path class="ln" style="stroke:#8d4b00;stroke-width:3" d="M-15 16 C-8 25 8 25 15 16"/>
+  </svg>`;
+}
+
+function cloudSvg(kind) {
+  const look = {
+    fluffy: { fill: "#ffffff", face: "#5d6d7e" },
+    rain: { fill: "#c3ced8", face: "#3f4d5a" },
+    storm: { fill: "#7d8b99", face: "#263238" },
+  }[kind];
+  const face = {
+    fluffy: `<path class="ln" style="stroke:${look.face};stroke-width:2.6" d="M58 58 C62 52 68 52 72 58 M88 58 C92 52 98 52 102 58 M72 66 C77 72 83 72 88 66"/>
+      <circle class="ns" fill="#f8bbd0" cx="56" cy="66" r="5"/><circle class="ns" fill="#f8bbd0" cx="104" cy="66" r="5"/>`,
+    rain: `<circle class="ns" fill="${look.face}" cx="66" cy="57" r="3.2"/><circle class="ns" fill="${look.face}" cx="94" cy="57" r="3.2"/>
+      <path class="ln" style="stroke:${look.face};stroke-width:2.4" d="M72 70 C77 65 83 65 88 70 M60 50 L70 47 M100 50 L90 47"/>`,
+    storm: `<path class="ln" style="stroke:${look.face};stroke-width:3" d="M58 48 L72 54 M102 48 L88 54 M70 70 C76 64 84 64 90 70"/>
+      <circle class="ns" fill="${look.face}" cx="67" cy="58" r="3.4"/><circle class="ns" fill="${look.face}" cx="93" cy="58" r="3.4"/>`,
+  }[kind];
+  const drops = kind === "fluffy" ? "" : [[46, 0], [66, -0.35], [86, -0.15], [106, -0.5], [126, -0.25], [56, -0.6], [96, -0.45], [116, -0.05]]
+    .map(([x, d], i) => `<g transform="translate(${x} ${84 + (i % 3) * 6})"><path class="rain ns" fill="#4fa8e8" style="animation-delay:${d}s" d="M0 0 C-3 5 -3.5 8 0 9 C3.5 8 3 5 0 0 Z"/></g>`).join("");
+  const bolt = kind === "storm"
+    ? `<path class="bolt" fill="#ffeb3b" style="stroke:#f9a825;stroke-width:1.5" d="M84 76 L70 104 L83 104 L74 132 L100 96 L87 96 L96 76 Z"/>` : "";
+  return `${svgOpen(`cloud-${kind}`, [0, 0, 160, kind === "fluffy" ? 100 : 140])}
+    ${drops}${bolt}
+    <path fill="${look.fill}" d="M30 82 C10 82 6 58 24 52 C22 32 46 24 58 36 C64 16 96 14 104 34 C116 24 140 30 138 50 C156 52 156 82 134 82 Z"/>
+    ${face}
+  </svg>`;
+}
+
+function owlSvg() {
+  const stars = [[16, 4, 0], [140, -6, -0.4], [150, 70, -0.2]].map(([x, y, d]) => sparkle(x, y, 0.5, "#fff9c4", d)).join("");
+  return `${svgOpen("owl", [0, -20, 160, 140])}
+    <path class="ns" fill="#fff3b0" opacity="0.9" d="M118 -14 A20 20 0 1 0 136 16 A16 16 0 1 1 118 -14 Z"/>
+    ${stars}
+    <g class="owing-l"><path fill="#7b5e57" d="M62 58 C40 40 18 36 4 44 C14 50 16 58 12 66 C24 62 30 68 30 76 C40 70 50 72 56 80 Z"/>
+      <path class="ln" style="stroke:#5d4037;stroke-width:1.4" d="M14 50 C26 54 40 60 54 70 M22 64 C32 66 42 70 50 76"/></g>
+    <g class="owing-r"><path fill="#7b5e57" d="M98 58 C120 40 142 36 156 44 C146 50 144 58 148 66 C136 62 130 68 130 76 C120 70 110 72 104 80 Z"/>
+      <path class="ln" style="stroke:#5d4037;stroke-width:1.4" d="M146 50 C134 54 120 60 106 70 M138 64 C128 66 118 70 110 76"/></g>
+    <path fill="#8d6e63" d="M80 30 C104 30 112 56 108 80 C104 100 92 108 80 108 C68 108 56 100 52 80 C48 56 56 30 80 30 Z"/>
+    <path class="ns" fill="#d7ccc8" d="M80 62 C96 62 100 80 96 94 C92 102 86 104 80 104 C74 104 68 102 64 94 C60 80 64 62 80 62 Z"/>
+    <path class="ln" style="stroke:#a1887f;stroke-width:1.3" d="M72 76 L76 80 L80 76 L84 80 L88 76 M70 88 L74 92 L78 88 L82 92 L86 88 L90 92"/>
+    <path fill="#8d6e63" d="M60 38 L55 18 L70 31 Z M100 38 L105 18 L90 31 Z"/>
+    <circle fill="#ffffff" cx="68" cy="52" r="12"/><circle fill="#ffffff" cx="92" cy="52" r="12"/>
+    <circle class="ns" fill="#ffb300" cx="69" cy="53" r="7.5"/><circle class="ns" fill="#ffb300" cx="93" cy="53" r="7.5"/>
+    <circle class="ns" fill="#1b1b1b" cx="70" cy="53" r="4.2"/><circle class="ns" fill="#1b1b1b" cx="94" cy="53" r="4.2"/>
+    <circle class="ns" fill="#ffffff" cx="71.5" cy="51" r="1.5"/><circle class="ns" fill="#ffffff" cx="95.5" cy="51" r="1.5"/>
+    <path fill="#ff9800" d="M76 61 L84 61 L80 71 Z"/>
+    <path class="ln" style="stroke:#ff9800;stroke-width:2.2" d="M72 108 L70 114 M74 108 L74 114 M86 108 L86 114 M88 108 L90 114"/>
+  </svg>`;
+}
+
+function kiteSvg() {
+  const bows = [[128, 116], [110, 132], [90, 146], [70, 158]]
+    .map(([x, y], i) => `<path fill="${["#e53935", "#fdd835", "#1e88e5", "#43a047"][i]}" d="M${x - 8} ${y - 5} L${x} ${y} L${x - 8} ${y + 5} Z M${x + 8} ${y - 5} L${x} ${y} L${x + 8} ${y + 5} Z"/>`).join("");
+  return `${svgOpen("kite", [-30, 0, 230, 190])}
+    <path class="ln" style="stroke:#9e9e9e;stroke-width:1.2" d="M132 60 C90 110 30 150 -40 210"/>
+    <g class="kitetail"><path class="ln" style="stroke:#795548;stroke-width:1.6" d="M140 104 C134 116 126 120 118 126 C108 134 100 140 90 146 C80 152 72 156 60 164"/>${bows}</g>
+    <path fill="#e53935" d="M140 10 L140 50 L104 50 Z"/>
+    <path fill="#fdd835" d="M140 10 L176 50 L140 50 Z"/>
+    <path fill="#1e88e5" d="M104 50 L140 50 L140 104 Z"/>
+    <path fill="#43a047" d="M140 50 L176 50 L140 104 Z"/>
+    <path class="ln" style="stroke:#5d4037;stroke-width:2" d="M140 10 L140 104 M104 50 L176 50"/>
+    <circle class="ns" fill="#212121" cx="131" cy="40" r="2.6"/><circle class="ns" fill="#212121" cx="149" cy="40" r="2.6"/>
+    <path class="ln" style="stroke:#212121;stroke-width:2" d="M133 60 C137 64 143 64 147 60"/>
+  </svg>`;
+}
+
+function duckSvg() {
+  const drops = [[6, 34, 0], [114, 40, -0.3], [16, 70, -0.5], [104, 76, -0.15], [0, 100, -0.4], [118, 106, -0.6]]
+    .map(([x, y, d]) => `<g transform="translate(${x} ${y})"><path class="rain ns" fill="#4fa8e8" style="animation-delay:${d}s" d="M0 0 C-3 5 -3.5 8 0 9 C3.5 8 3 5 0 0 Z"/></g>`).join("");
+  const boot = (x, offset) => `<g class="leg swing-small" style="${delayed(offset)}">
+      <path fill="#e53935" d="M${x} 110 L${x + 10} 110 L${x + 10} 124 L${x + 18} 124 C${x + 21} 124 ${x + 21} 132 ${x + 17} 132 L${x} 132 Z"/></g>`;
+  return `${svgOpen("duck", [0, -30, 120, 166])}
+    ${drops}
+    ${boot(44, 0.5)}
+    <path fill="#ffd54f" d="M28 92 C24 74 40 64 60 66 C78 68 90 78 88 94 C86 108 70 116 56 116 C40 116 30 106 28 92 Z"/>
+    <path fill="#ffd54f" d="M30 84 L18 76 L26 92 Z"/>
+    ${boot(58, 0)}
+    <circle fill="#ffd54f" cx="76" cy="54" r="15"/>
+    <path fill="#ff9800" d="M88 52 L103 57 L88 62 Z"/>
+    <circle class="ns" fill="#1b1b1b" cx="80" cy="49" r="2.6"/><circle class="ns" fill="#ffffff" cx="81" cy="48" r="0.9"/>
+    <circle class="ns" fill="#ffab91" opacity="0.8" cx="76" cy="59" r="3.5"/>
+    <path class="ln" style="stroke:#6d4c41;stroke-width:3" d="M60 -8 L62 66 C62 74 70 74 70 67"/>
+    <path fill="#ef5350" d="M14 18 C20 -16 104 -16 110 18 C102 12 94 12 88 18 C82 12 72 12 62 18 C52 12 42 12 36 18 C30 12 22 12 14 18 Z"/>
+    <path class="ns" fill="#ffffff" opacity="0.85" d="M36 18 C40 2 50 -8 61 -12 C55 -2 54 8 62 18 C52 12 42 12 36 18 Z M88 18 C84 2 74 -8 63 -12 C69 -2 70 8 62 18 C72 12 82 12 88 18 Z"/>
+    <path fill="#ffca28" d="M44 86 C52 80 66 82 68 92 C60 98 48 98 44 86 Z"/>
+  </svg>`;
+}
+
+function snowmanSvg() {
+  const flakes = [[8, 20, 0], [92, 6, -0.3], [96, 70, -0.6], [4, 90, -0.45]].map(([x, y, d]) => sparkle(x, y, 0.45, "#bbdefb", d)).join("");
+  return `${svgOpen("snowman", [0, -24, 100, 156])}
+    ${flakes}
+    <path class="ln" style="stroke:#6d4c41;stroke-width:3" d="M34 62 L12 48 M18 52 L12 42 M68 62 L88 46 M83 50 L90 40"/>
+    <circle fill="#ffffff" cx="50" cy="104" r="26"/>
+    <circle fill="#ffffff" cx="50" cy="64" r="19"/>
+    <circle fill="#ffffff" cx="50" cy="32" r="15"/>
+    <circle class="ns" fill="#37474f" cx="50" cy="94" r="2.6"/><circle class="ns" fill="#37474f" cx="50" cy="106" r="2.6"/>
+    <circle class="ns" fill="#37474f" cx="50" cy="62" r="2.4"/><circle class="ns" fill="#37474f" cx="50" cy="72" r="2.4"/>
+    <circle class="ns" fill="#37474f" cx="45" cy="28" r="2.2"/><circle class="ns" fill="#37474f" cx="56" cy="28" r="2.2"/>
+    <path fill="#ff8f00" d="M52 33 L70 36 L52 39 Z"/>
+    <path class="ln" style="stroke:#37474f;stroke-width:1.8" d="M44 40 C48 43 54 43 58 40"/>
+    <path fill="#e53935" d="M34 46 C42 50 58 50 66 46 L66 53 C58 57 42 57 34 53 Z"/>
+    <g class="scarf"><path fill="#e53935" d="M58 50 L63 72 L70 70 L64 50 Z"/></g>
+    <rect fill="#263238" x="33" y="14" width="34" height="5" rx="2"/>
+    <rect fill="#263238" x="39" y="-6" width="22" height="21" rx="2"/>
+    <rect class="ns" fill="#e53935" x="39" y="9" width="22" height="4"/>
+  </svg>`;
+}
+
+function penguinSvg(ctx = {}) {
+  const say = ctx.temperature ? `Brrr! ${ctx.temperature}` : "Brrr!";
+  return `${svgOpen("penguin", [0, -44, 100, 150])}
+    <g class="wobble">
+      <path fill="#ff9800" d="M34 98 C30 104 40 106 48 102 Z M66 98 C70 104 60 106 52 102 Z"/>
+      <g class="flip-l"><path fill="#263238" d="M24 54 C12 62 10 76 14 82 C20 76 24 68 28 62 Z"/></g>
+      <g class="flip-r"><path fill="#263238" d="M76 54 C88 62 90 76 86 82 C80 76 76 68 72 62 Z"/></g>
+      <path fill="#263238" d="M50 20 C72 20 80 50 78 76 C76 96 64 100 50 100 C36 100 24 96 22 76 C20 50 28 20 50 20 Z"/>
+      <path class="ns" fill="#ffffff" d="M50 36 C64 38 68 58 66 78 C64 92 58 96 50 96 C42 96 36 92 34 78 C32 58 36 38 50 36 Z"/>
+      <circle class="ns" fill="#ffffff" cx="43" cy="42" r="5"/><circle class="ns" fill="#ffffff" cx="57" cy="42" r="5"/>
+      <circle class="ns" fill="#1b1b1b" cx="44" cy="42" r="2.6"/><circle class="ns" fill="#1b1b1b" cx="58" cy="42" r="2.6"/>
+      <path fill="#ff9800" d="M45 50 L55 50 L50 58 Z"/>
+      <circle class="ns" fill="#f8bbd0" cx="37" cy="52" r="3.5"/><circle class="ns" fill="#f8bbd0" cx="63" cy="52" r="3.5"/>
+      <path fill="#29b6f6" d="M28 62 C40 68 60 68 72 62 L72 68 C60 74 40 74 28 68 Z"/>
+      <path fill="#e53935" d="M30 30 C30 8 70 8 70 30 Z"/>
+      <rect fill="#ffffff" x="28" y="26" width="44" height="7" rx="3.5"/>
+      <circle fill="#ffffff" cx="50" cy="8" r="5"/>
+    </g>
+    ${speechFor(50, -44, say, "#0277bd")}
+  </svg>`;
+}
+
+function icecreamSvg(ctx = {}) {
+  const say = ctx.temperature ? `Phew, ${ctx.temperature}!` : "Phew, it's hot!";
+  const leg = (x, offset) => `<g class="leg swing" style="${delayed(offset)}">
+      <path class="ln" style="stroke:#5d4037;stroke-width:3" d="M${x} 112 L${x} 130"/>
+      <path fill="#42a5f5" d="M${x - 3} 128 L${x + 9} 128 C${x + 13} 128 ${x + 13} 135 ${x + 9} 135 L${x - 3} 135 Z"/></g>`;
+  return `${svgOpen("icecream", [0, -44, 100, 182])}
+    ${leg(40, 0.5)}${leg(52, 0)}
+    <path fill="#d7a35e" d="M24 62 L72 62 L48 118 Z"/>
+    <path class="ln" style="stroke:#a8743a;stroke-width:1.3" d="M30 70 L60 104 M40 64 L66 92 M54 64 L70 78 M66 70 L36 104 M56 64 L30 92 M42 64 L27 78"/>
+    <path fill="#f48fb1" d="M18 62 C14 44 30 34 48 36 C64 34 80 44 76 62 C68 58 62 66 56 60 C50 66 44 58 38 64 C32 58 24 66 18 62 Z"/>
+    <path fill="#f48fb1" d="M28 62 C28 72 34 72 34 64 Z M60 62 C60 76 67 76 67 63 Z"/>
+    <path class="ns drip" fill="#f48fb1" d="M64 78 C61 82 62 85 64 85 C66 85 67 82 64 78 Z"/>
+    <path fill="#a5d6a7" d="M26 42 C24 24 36 14 48 14 C60 14 72 24 68 42 Z"/>
+    <circle class="ns" fill="#5d4037" cx="38" cy="26" r="2"/><circle class="ns" fill="#5d4037" cx="54" cy="22" r="2"/><circle class="ns" fill="#5d4037" cx="60" cy="32" r="2"/>
+    <circle fill="#e53935" cx="48" cy="10" r="5.5"/>
+    <path class="ln" style="stroke:#558b2f;stroke-width:1.6" d="M48 5 C50 -1 54 -3 58 -2"/>
+    <circle class="ns" fill="#1b1b1b" cx="40" cy="47" r="2.6"/><circle class="ns" fill="#1b1b1b" cx="56" cy="47" r="2.6"/>
+    <path fill="#c2185b" d="M42 53 C44 59 52 59 54 53 Z"/>
+    <path class="ns drip" style="animation-delay:-0.4s" fill="#81d4fa" d="M30 40 C27 45 28 48 30 48 C32 48 33 45 30 40 Z"/>
+    ${speechFor(50, -44, say, "#e65100")}
+  </svg>`;
+}
+
+const WEATHER_CSS = `
+.spin-slow { transform-box: fill-box; transform-origin: center; animation: wspin 9s linear infinite; }
+.rain { animation: rain 0.75s linear infinite; }
+.bolt { animation: bolt 1.6s steps(1, end) infinite; }
+.owing-l { transform-box: fill-box; transform-origin: 100% 30%; animation: owl-l var(--cycle) ease-in-out infinite; }
+.owing-r { transform-box: fill-box; transform-origin: 0% 30%; animation: owl-r var(--cycle) ease-in-out infinite; }
+.kitetail { transform-box: fill-box; transform-origin: 100% 0; animation: tailwave 0.8s ease-in-out infinite; }
+.scarf { transform-box: fill-box; transform-origin: 50% 0; animation: swing-small 0.6s ease-in-out infinite; }
+.wobble { transform-box: fill-box; transform-origin: 50% 100%; animation: swing-tiny var(--cycle) ease-in-out infinite; }
+.flip-l { transform-box: fill-box; transform-origin: 100% 0; animation: swing-small calc(var(--cycle) / 2) ease-in-out infinite; }
+.flip-r { transform-box: fill-box; transform-origin: 0 0; animation: swing-small calc(var(--cycle) / 2) ease-in-out infinite reverse; }
+.drip { animation: drip 1s ease-in infinite; }
+@keyframes wspin { to { transform: rotate(360deg); } }
+@keyframes rain { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(34px); opacity: 0; } }
+@keyframes bolt { 0%, 38% { opacity: 0; } 40%, 46% { opacity: 1; } 48%, 64% { opacity: 0; } 66%, 70% { opacity: 1; } 72%, 100% { opacity: 0; } }
+@keyframes owl-l { 0%, 100% { transform: rotate(18deg); } 50% { transform: rotate(-26deg); } }
+@keyframes owl-r { 0%, 100% { transform: rotate(-18deg); } 50% { transform: rotate(26deg); } }
+@keyframes tailwave { 0%, 100% { transform: skewX(0deg) rotate(0deg); } 50% { transform: skewX(8deg) rotate(4deg); } }
+@keyframes drip { 0% { opacity: 0; transform: translateY(-2px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(14px); } }
+`;
+
+/* ---- New Year's Eve ----------------------------------------------------- */
+
+function fireworksSvg(ctx = {}) {
+  const dur = ctx.duration || DEFAULT_DURATION_S;
+  const rise = Math.min(0.6, dur * 0.12);
+  const pop = Math.min(1.7, dur * 0.34);
+  const shots = [
+    [70, 70, ["#ff5252", "#ffd740"], 0.04],
+    [205, 52, ["#40c4ff", "#ffffff"], 0.2],
+    [140, 112, ["#69f0ae", "#e040fb"], 0.36],
+    [245, 128, ["#ffab40", "#ff4081"], 0.5],
+  ];
+  return `${svgOpen("fireworks", [0, 0, 300, 260])}
+    ${shots.map(([x, y, [a, b], at]) => {
+      const t = (at * dur).toFixed(2);
+      const rays = Array.from({ length: 12 }, (_, i) => {
+        const angle = (i * Math.PI) / 6;
+        const [c, s] = [Math.cos(angle), Math.sin(angle)];
+        const col = i % 2 ? a : b;
+        return `<path class="ln" style="stroke:${col};stroke-width:3" d="M${(c * 10).toFixed(1)} ${(s * 10).toFixed(1)} L${(c * 34).toFixed(1)} ${(s * 34).toFixed(1)}"/>` +
+          `<circle class="ns" fill="${col}" cx="${(c * 42).toFixed(1)}" cy="${(s * 42).toFixed(1)}" r="2.6"/>`;
+      }).join("");
+      return `<circle class="rocket ns" fill="#fff59d" cx="${x}" cy="${y}" r="3"
+          style="--rise:${260 - y}px;animation-duration:${rise}s;animation-delay:${t}s"/>
+        <g transform="translate(${x} ${y})"><g class="burst" style="animation-duration:${pop}s;animation-delay:${(+t + rise).toFixed(2)}s">
+          ${rays}<circle class="ns" fill="#ffffff" r="4"/></g></g>`;
+    }).join("")}
+  </svg>`;
+}
+
+function bannerPlaneSvg(ctx = {}) {
+  const text = ctx.banner || "Happy New Year!";
+  const size = Math.min(24, Math.round(560 / Math.max(10, text.length)));
+  return `${svgOpen("bannerplane", [0, 0, 460, 110])}
+    <path class="ln" style="stroke:#8d6e63;stroke-width:1.5" d="M318 46 L352 56 M318 70 L352 58"/>
+    <g class="banner">
+      <path fill="#fffde7" style="stroke:#c62828;stroke-width:2" d="M18 32 C80 26 140 38 200 32 C250 27 290 34 318 32 L318 84 C290 86 250 79 200 84 C140 90 80 78 18 84 Z"/>
+      <g class="say"><text x="168" y="${64 + size * 0.1}" text-anchor="middle" font-size="${size}" font-weight="800" fill="#c62828">${esc(text)}</text></g>
+    </g>
+    <path fill="#e53935" d="M352 56 C360 42 420 40 440 48 C452 52 452 62 440 64 C420 72 362 70 352 60 Z"/>
+    <path fill="#e53935" d="M354 54 L342 30 L358 30 L370 48 Z"/>
+    <path fill="#ffffff" d="M376 60 L408 60 L398 90 L384 90 Z"/>
+    <path fill="#81d4fa" d="M404 44 C410 36 424 38 428 46 Z"/>
+    <path class="ns" fill="#ffffff" d="M372 52 L436 52 L436 56 L372 56 Z"/>
+    <circle fill="#424242" cx="447" cy="56" r="3.5"/>
+    <g class="prop"><rect fill="#616161" x="445" y="38" width="4" height="36" rx="2"/></g>
+  </svg>`;
+}
+
+// A party hat for the celebrating dragon, in head coordinates.
+const PARTY_HAT = `
+    <g transform="rotate(-14 256 68)">
+      <path fill="#ab47bc" d="M242 70 L257 24 L272 70 Z"/>
+      <path class="ns" fill="#ffeb3b" d="M248 52 L266 52 L268 58 L246 58 Z M253 36 L261 36 L263 42 L251 42 Z"/>
+      <circle fill="#ff4081" cx="257" cy="23" r="5.5"/>
+    </g>`;
+
+/* ---- Lunar New Year ----------------------------------------------------- */
+
+function lionDanceSvg() {
+  const leg = (x, offset) => `<g class="leg swing-small" style="${delayed(offset)}">
+      <path fill="#fdd835" d="M${x} 92 L${x + 11} 92 L${x + 11} 124 L${x} 124 Z"/>
+      <path class="ns" fill="#e53935" d="M${x} 104 L${x + 11} 104 L${x + 11} 108 L${x} 108 Z"/>
+      <path fill="#212121" d="M${x - 2} 123 L${x + 13} 123 C${x + 18} 123 ${x + 18} 131 ${x + 13} 131 L${x - 2} 131 Z"/></g>`;
+  const poms = Array.from({ length: 11 }, (_, i) => {
+    const a = (-150 + i * 25) * (Math.PI / 180);
+    return `<circle fill="#ffffff" cx="${(168 + Math.cos(a) * 42).toFixed(1)}" cy="${(52 + Math.sin(a) * 42).toFixed(1)}" r="7"/>`;
+  }).join("");
+  return `${svgOpen("liondance", [0, -50, 216, 186])}
+    ${leg(52, 0.5)}${leg(136, 0)}
+    <path fill="#ffffff" d="M34 50 C18 40 8 50 12 62 C2 66 6 80 18 78 C22 88 36 84 36 74 Z"/>
+    <path fill="#d32f2f" d="M30 46 C50 30 110 26 150 34 L156 98 C120 102 70 102 36 98 C26 84 24 60 30 46 Z"/>
+    <path class="ln" style="stroke:#ffca28;stroke-width:2.2" d="M48 52 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 M40 68 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 M42 84 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0"/>
+    <path fill="#ffffff" d="M36 96 q5 9 10 0 q5 9 10 0 q5 9 10 0 q5 9 10 0 q5 9 10 0 q5 9 10 0 q5 9 10 0 q5 9 10 0 q5 9 10 0 q5 9 10 0 q5 9 10 0 q5 9 10 0 L156 100 L36 100 Z"/>
+    ${leg(66, 0)}${leg(150, 0.5)}
+    <g class="lionhead">
+      <circle fill="#fff59d" cx="168" cy="52" r="42"/>
+      ${poms}
+      <path fill="#e53935" d="M134 30 C140 6 196 4 204 30 C210 48 206 74 194 82 L140 82 C130 70 128 46 134 30 Z"/>
+      <path fill="#ffca28" d="M164 12 L170 -6 L176 12 Z"/>
+      <circle fill="#b3e5fc" style="stroke:#ffca28;stroke-width:2.5" cx="170" cy="22" r="7"/>
+      <path class="ln" style="stroke:#ffffff;stroke-width:4" d="M144 30 C150 24 160 24 166 30 M174 30 C180 24 190 24 196 30"/>
+      <ellipse fill="#ffffff" cx="156" cy="42" rx="10" ry="9"/><ellipse fill="#ffffff" cx="184" cy="42" rx="10" ry="9"/>
+      <circle class="ns" fill="#1b1b1b" cx="159" cy="43" r="5"/><circle class="ns" fill="#1b1b1b" cx="187" cy="43" r="5"/>
+      <circle class="ns" fill="#ffffff" cx="161" cy="41" r="1.6"/><circle class="ns" fill="#ffffff" cx="189" cy="41" r="1.6"/>
+      <circle fill="#ffca28" cx="196" cy="58" r="7"/>
+      <g class="jaw2">
+        <path fill="#e53935" d="M140 72 L206 64 C208 82 198 94 172 94 C154 94 144 86 140 72 Z"/>
+        <path class="ns" fill="#ffffff" d="M146 74 L152 80 L158 73 L164 79 L170 72 L176 78 L182 71 L188 77 L194 70 L200 76 L204 68 Z"/>
+        <path fill="#ffffff" d="M150 92 q6 10 12 0 q6 10 12 0 q6 10 12 0 q6 10 12 0 Z"/>
+      </g>
+    </g>
+    ${speechFor(120, -50, "Happy Lunar New Year!", "#c62828")}
+  </svg>`;
+}
+
+function paradeDragonSvg() {
+  const segment = (x, i) => `<g transform="translate(${x} 70)"><g class="seg" style="animation-delay:${(-i * 0.11).toFixed(2)}s">
+      <path fill="#43a047" d="M-10 -17 L0 -34 L10 -17 Z"/>
+      <ellipse fill="#e53935" rx="22" ry="20"/>
+      <path class="ln" style="stroke:#ffca28;stroke-width:1.8" d="M-14 -6 q7 -7 14 0 q7 -7 14 0 M-10 4 q5 -6 10 0 q5 -6 10 0"/>
+      <path class="ns" fill="#ffca28" d="M-20 7 C-12 18 12 18 20 7 C12 13 -12 13 -20 7 Z"/>
+      <path fill="#ffffff" d="M-14 17 q3.5 8 7 0 q3.5 8 7 0 q3.5 8 7 0 q3.5 8 7 0 Z"/>
+    </g></g>`;
+  return `${svgOpen("paradedragon", [-10, -40, 460, 170])}
+    <g transform="translate(14 70)"><g class="seg" style="animation-delay:0.11s">
+      <path fill="#43a047" d="M6 0 C-10 -24 -26 -22 -34 -30 C-30 -14 -24 -6 -30 4 C-20 2 -12 8 -14 18 C-4 10 4 8 8 6 Z"/>
+      <path fill="#ffca28" d="M4 0 C-6 -10 -14 -10 -20 -14 C-16 -4 -14 2 -18 8 C-8 6 0 6 6 4 Z"/>
+    </g></g>
+    ${Array.from({ length: 10 }, (_, i) => segment(34 + i * 32, i)).join("")}
+    <g transform="translate(0 0)"><g class="seg" style="animation-delay:-1.1s">
+      <path class="ln" style="stroke:#ffca28;stroke-width:3" d="M352 34 C346 18 338 8 326 4 M344 20 L332 22 M362 30 C362 14 356 2 346 -6 M358 14 L366 4"/>
+      <path fill="#43a047" d="M336 46 L318 30 L340 38 L330 18 L350 34 L350 14 L362 32 Z"/>
+      <path fill="#e53935" d="M330 50 C336 28 372 22 396 34 C414 42 424 56 420 70 L398 74 C404 82 400 92 388 92 L348 90 C334 84 326 66 330 50 Z"/>
+      <path class="ns" fill="#ffca28" d="M396 36 C412 44 420 56 418 66 L400 68 C404 58 402 48 396 36 Z"/>
+      <path fill="#ffffff" d="M350 90 q5 10 10 0 q5 10 10 0 q5 10 10 0 q5 10 10 0 L388 92 Z"/>
+      <path fill="#b71c1c" d="M398 74 L424 70 C424 80 414 88 398 86 Z"/>
+      <path class="ns" fill="#ffffff" d="M400 74 L404 79 L408 73 L412 78 L416 72 L420 76 L422 71 Z"/>
+      <ellipse fill="#ffffff" cx="374" cy="48" rx="10" ry="9"/>
+      <circle class="ns" fill="#1b1b1b" cx="377" cy="49" r="5"/><circle class="ns" fill="#ffffff" cx="379" cy="47" r="1.6"/>
+      <path fill="#43a047" d="M360 38 C368 30 380 30 388 36 C380 36 370 38 362 44 Z"/>
+      <circle class="ns" fill="#1b1b1b" cx="414" cy="52" r="2.2"/>
+      <path class="ln whisker" style="stroke:#ffca28;stroke-width:2" d="M416 58 C428 54 438 44 450 46 M412 64 C426 70 436 80 450 76"/>
+    </g></g>
+  </svg>`;
+}
+
+function lantern(x, y, s, delay) {
+  return `<g transform="translate(${x} ${y}) scale(${s})"><g class="swing-lantern" style="animation-delay:${delay}s">
+    <path class="ln" style="stroke:#8d6e63;stroke-width:1.5" d="M0 -46 L0 -24"/>
+    <rect fill="#ffca28" x="-12" y="-26" width="24" height="6" rx="2"/>
+    <ellipse fill="#e53935" rx="30" ry="22"/>
+    <ellipse class="ns" fill="#ff8a65" opacity="0.45" rx="17" ry="13"/>
+    <path class="ln" style="stroke:#b71c1c;stroke-width:1.5" d="M0 -22 L0 22 M-14 -19 C-21 -8 -21 8 -14 19 M14 -19 C21 -8 21 8 14 19"/>
+    <circle class="ns" fill="#ffca28" r="7"/><path class="ns" fill="#e53935" d="M0 -4 L4 0 L0 4 L-4 0 Z"/>
+    <rect fill="#ffca28" x="-12" y="20" width="24" height="6" rx="2"/>
+    <path class="ln" style="stroke:#ffca28;stroke-width:2" d="M-5 26 L-6 46 M0 26 L0 48 M5 26 L6 46"/>
+  </g></g>`;
+}
+
+function lanternsSvg() {
+  return `${svgOpen("lanterns", [0, 0, 240, 180])}
+    ${lantern(50, 62, 1, 0)}${lantern(130, 92, 0.85, -0.6)}${lantern(204, 56, 0.72, -1.1)}
+  </svg>`;
+}
+
+/* ---- Valentine's Day ---------------------------------------------------- */
+
+const HEART = "M0 -6 C-4 -16 -20 -16 -20 -2 C-20 10 -6 18 0 26 C6 18 20 10 20 -2 C20 -16 4 -16 0 -6 Z";
+
+function cupidSvg() {
+  const wing = (cls, fill, tip) => `<g class="cwing3 ${cls}">
+      <path fill="${fill}" d="M84 52 C76 30 62 18 44 14 C50 24 46 28 40 30 C48 34 48 40 44 44 C52 46 54 52 52 58 C62 58 70 60 76 66 Z"/>
+      <path class="ln" style="stroke:${tip};stroke-width:1.4" d="M46 16 C56 24 66 36 74 50 M42 30 C54 36 64 44 72 56 M46 44 C56 48 64 54 72 62"/></g>`;
+  return `${svgOpen("cupid", [0, -10, 214, 150])}
+    ${wing("far", "#ede7f6", "#d1c4e9")}
+    <path fill="#ffccbc" d="M74 86 C60 94 46 94 36 88 C42 82 54 80 66 80 Z"/>
+    <path fill="#ffccbc" d="M76 92 C66 104 54 110 42 108 C46 100 56 94 68 90 Z"/>
+    <ellipse fill="#ffccbc" cx="90" cy="80" rx="22" ry="18"/>
+    <path fill="#ffffff" d="M70 84 C80 98 104 98 112 84 L110 92 C100 104 80 104 72 92 Z"/>
+    <path class="ns" fill="#f48fb1" d="M74 70 L106 92 L102 96 L72 76 Z"/>
+    <circle fill="#ffccbc" cx="112" cy="48" r="18"/>
+    <g fill="#ffd54f">
+      <circle cx="98" cy="36" r="7"/><circle cx="108" cy="30" r="7"/><circle cx="120" cy="31" r="7"/><circle cx="128" cy="40" r="6"/><circle cx="96" cy="47" r="6"/>
+    </g>
+    <circle class="ns" fill="#1b1b1b" cx="119" cy="48" r="2.4"/>
+    <circle class="ns" fill="#f48fb1" cx="122" cy="56" r="4"/>
+    <path class="ln" style="stroke:#8d4b3a;stroke-width:1.8" d="M114 58 C117 61 121 61 124 58"/>
+    <path class="ln" style="stroke:#ffb300;stroke-width:3.5" d="M146 32 C164 46 164 74 146 88"/>
+    <path class="ln" style="stroke:#9e9e9e;stroke-width:1.1" d="M146 32 L136 60 L146 88"/>
+    <g class="shoot">
+      <path class="ln" style="stroke:#8d6e63;stroke-width:2.2" d="M128 60 L178 60"/>
+      <g transform="translate(184 60) rotate(-90) scale(0.42)"><path fill="#e91e63" d="${HEART}"/></g>
+      <path class="ns" fill="#f48fb1" d="M128 60 L122 54 L126 60 L122 66 Z"/>
+    </g>
+    <path class="ln" style="stroke:#ffccbc;stroke-width:7" d="M104 74 C116 72 128 66 138 60"/>
+    <circle fill="#ffccbc" cx="139" cy="60" r="4.5"/>
+    ${wing("near", "#ffffff", "#f8bbd0")}
+  </svg>`;
+}
+
+function heartsSvg() {
+  const hearts = [[40, 64, 1.4, "#e91e63", 0], [102, 32, 1, "#f48fb1", -0.3], [152, 84, 1.6, "#ff4081", -0.6],
+    [92, 116, 0.9, "#f06292", -0.15], [196, 40, 0.8, "#ff80ab", -0.45]];
+  return `${svgOpen("hearts", [-10, -10, 236, 160])}
+    ${hearts.map(([x, y, s, c, d]) => `<g transform="translate(${x} ${y}) scale(${s})"><g class="beat" style="animation-delay:${d}s">
+      <path fill="${c}" d="${HEART}"/><ellipse class="ns" fill="#ffffff" opacity="0.55" cx="-9" cy="-4" rx="4" ry="2.6" transform="rotate(-30 -9 -4)"/>
+    </g></g>`).join("")}
+  </svg>`;
+}
+
+function loveBird(x, y, body, wing, delay) {
+  return `<g transform="translate(${x} ${y})">
+    <path fill="${wing}" d="M-20 4 L-38 -4 L-35 10 Z"/>
+    <ellipse fill="${body}" cx="0" cy="4" rx="22" ry="16"/>
+    <circle fill="${body}" cx="16" cy="-10" r="12"/>
+    <path fill="#ffb300" d="M27 -12 L37 -9 L27 -6 Z"/>
+    <circle class="ns" fill="#1b1b1b" cx="19" cy="-13" r="2.2"/>
+    <circle class="ns" fill="#ff8a80" cx="18" cy="-5" r="3"/>
+    <g class="bwing" style="animation-delay:${delay}s"><path fill="${wing}" d="M-8 2 C-4 -20 12 -30 22 -26 C16 -16 8 -6 6 6 Z"/></g>
+  </g>`;
+}
+
+function lovebirdsSvg() {
+  return `${svgOpen("lovebirds", [0, 0, 226, 160])}
+    <path class="ln" style="stroke:#e91e63;stroke-width:1.6" d="M104 41 C112 70 126 86 136 96 M186 31 C178 64 158 84 146 96"/>
+    ${loveBird(70, 50, "#f8bbd0", "#f48fb1", 0)}${loveBird(150, 40, "#b3e5fc", "#81d4fa", -0.15)}
+    <g transform="translate(141 104) scale(1.25)"><g class="beat"><path fill="#e53935" d="${HEART}"/></g></g>
+  </svg>`;
+}
+
+/* ---- St Patrick's Day --------------------------------------------------- */
+
+function leprechaunSvg() {
+  const leg = (x, offset) => `<g class="leg swing" style="${delayed(offset)}">
+      <path fill="#2e7d32" d="M${x} 100 L${x + 10} 100 L${x + 10} 112 L${x} 112 Z"/>
+      <path fill="#ffffff" d="M${x} 112 L${x + 10} 112 L${x + 10} 128 L${x} 128 Z"/>
+      <path fill="#212121" d="M${x - 2} 127 L${x + 13} 127 C${x + 19} 127 ${x + 19} 135 ${x + 13} 135 L${x - 2} 135 Z"/>
+      <rect class="ns" fill="#ffca28" x="${x + 5}" y="128" width="5" height="4"/></g>`;
+  return `${svgOpen("leprechaun", [0, -44, 116, 184])}
+    ${leg(42, 0.5)}
+    <path fill="#2e7d32" d="M30 104 C28 80 38 64 54 64 C70 64 80 80 78 104 L72 110 L54 104 L36 110 Z"/>
+    <rect fill="#212121" x="31" y="88" width="46" height="6"/>
+    <rect fill="#ffca28" x="49" y="87" width="9" height="8" rx="1.5"/>
+    <circle class="ns" fill="#ffca28" cx="62" cy="74" r="2"/><circle class="ns" fill="#ffca28" cx="62" cy="81" r="2"/>
+    ${leg(55, 0)}
+    <circle fill="#f6c7a1" cx="56" cy="48" r="14"/>
+    <path fill="#ef6c00" d="M41 48 C38 66 47 76 57 76 C67 76 74 66 71 48 C66 56 47 56 41 48 Z"/>
+    <path class="ns" fill="#ef6c00" d="M46 56 C50 52 62 52 66 56 C60 60 52 60 46 56 Z"/>
+    <circle class="ns" fill="#262626" cx="62" cy="45" r="1.9"/>
+    <circle class="ns" fill="#f19a8a" opacity="0.7" cx="65" cy="51" r="3"/>
+    <ellipse fill="#2e7d32" cx="56" cy="34" rx="22" ry="4.5"/>
+    <path fill="#2e7d32" d="M42 34 L46 6 L68 6 L72 34 Z"/>
+    <rect fill="#212121" x="44" y="24" width="27" height="6"/>
+    <rect class="ns" fill="#ffca28" x="53" y="23" width="8" height="8" rx="1"/><rect class="ns" fill="#212121" x="55.5" y="25.5" width="3" height="3"/>
+    <g class="carry">
+      <path fill="#212121" d="M68 82 C66 94 70 104 84 106 C98 104 102 94 100 82 Z"/>
+      <ellipse fill="#37474f" cx="84" cy="82" rx="17" ry="4"/>
+      <circle fill="#ffca28" cx="76" cy="78" r="5"/><circle fill="#ffd54f" cx="85" cy="75" r="5"/><circle fill="#ffca28" cx="93" cy="78" r="5"/><circle fill="#ffe082" cx="84" cy="70" r="4.5"/>
+      <path fill="#2e7d32" d="M54 70 C60 76 66 80 70 82 L68 88 C62 86 56 82 50 76 Z"/>
+      <circle fill="#f6c7a1" cx="70" cy="85" r="4.5"/>
+    </g>
+    ${speechFor(58, -44, "Happy St Paddy's!", "#2e7d32")}
+  </svg>`;
+}
+
+function shamrock(x, y, s, delay, color) {
+  const leaf = "M0 0 C-4 -6 -16 -10 -16 -20 C-16 -28 -6 -30 0 -22 C6 -30 16 -28 16 -20 C16 -10 4 -6 0 0 Z";
+  return `<g transform="translate(${x} ${y}) scale(${s})"><g class="twirl" style="animation-delay:${delay}s">
+    <path class="ln" style="stroke:#2e7d32;stroke-width:3" d="M0 0 C2 10 6 18 12 24"/>
+    ${[0, 120, 240].map((r) => `<path fill="${color}" transform="rotate(${r})" d="${leaf}"/>`).join("")}
+  </g></g>`;
+}
+
+function shamrocksSvg() {
+  return `${svgOpen("shamrocks", [0, 0, 220, 140])}
+    ${shamrock(40, 60, 1.2, 0, "#43a047")}${shamrock(104, 36, 0.8, -0.7, "#66bb6a")}
+    ${shamrock(150, 92, 1.4, -1.4, "#2e7d32")}${shamrock(196, 44, 0.7, -2, "#4caf50")}
+  </svg>`;
+}
+
+function rainbowGoldSvg() {
+  const colors = ["#ff595e", "#ff924c", "#ffca3a", "#8ac926", "#1982c4", "#6a4c93"];
+  const arcs = colors.map((c, i) => {
+    const r = 128 - i * 10;
+    return `<path class="ln" style="stroke:${c};stroke-width:10" d="M${150 - r} 168 A${r} ${r} 0 0 1 ${150 + r} 168"/>`;
+  }).join("");
+  const puff = (x) => `<path fill="#ffffff" d="M${x - 34} 174 C${x - 44} 160 ${x - 30} 148 ${x - 18} 154 C${x - 14} 140 ${x + 6} 138 ${x + 10} 152 C${x + 22} 146 ${x + 36} 156 ${x + 30} 174 Z"/>`;
+  return `${svgOpen("rainbowgold", [0, 20, 320, 166])}
+    ${arcs}${puff(30)}
+    <path fill="#212121" d="M258 150 C256 162 260 172 274 174 C288 172 292 162 290 150 Z"/>
+    <ellipse fill="#37474f" cx="274" cy="150" rx="17" ry="4"/>
+    <circle fill="#ffca28" cx="266" cy="146" r="5"/><circle fill="#ffd54f" cx="275" cy="143" r="5"/><circle fill="#ffca28" cx="283" cy="146" r="5"/>
+    ${sparkle(262, 128, 0.5, "#fff59d", 0)}${sparkle(290, 134, 0.4, "#ffffff", -0.4)}${sparkle(276, 118, 0.35, "#fff59d", -0.2)}
+  </svg>`;
+}
+
+/* ---- Día de los Muertos ------------------------------------------------- */
+
+function calaveraSvg() {
+  const bone = (d, w = 6) =>
+    `<path class="ln" style="stroke:#2f3440;stroke-width:${w + 3}" d="${d}"/>` +
+    `<path class="ln" style="stroke:#f5f1e6;stroke-width:${w}" d="${d}"/>`;
+  const leg = (x, offset) => `<g class="leg swing" style="${delayed(offset)}">
+      ${bone(`M${x} 106 L${x} 136`)}${bone(`M${x} 136 L${x} 164`)}${bone(`M${x} 165 L${x + 11} 166`, 5)}</g>`;
+  const arm = (path, maraca, color, delay) => `<g class="shake" style="animation-delay:${delay}s">
+      ${bone(path, 5)}
+      <path class="ln" style="stroke:#6d4c41;stroke-width:3" d="${maraca[0]}"/>
+      <ellipse fill="${color}" style="stroke:#2f3440;stroke-width:1.5" cx="${maraca[1]}" cy="${maraca[2]}" rx="7" ry="9"/>
+      <path class="ln" style="stroke:#ffffff;stroke-width:1.5" d="M${maraca[1] - 5} ${maraca[2]} L${maraca[1] + 5} ${maraca[2]}"/></g>`;
+  const flower = (x, y, c, r = 6) =>
+    `<circle fill="${c}" style="stroke:#2f3440;stroke-width:1" cx="${x}" cy="${y}" r="${r}"/><circle class="ns" fill="#fff59d" cx="${x}" cy="${y}" r="${r / 3}"/>`;
+  return `${svgOpen("calavera", [0, -46, 124, 232])}
+    ${arm("M50 66 L36 52 L34 32", ["M34 32 L33 20", 33, 13], "#ff7043", 0)}
+    ${leg(52, 0.5)}
+    ${bone("M55 58 L54 64", 5)}${bone("M54 62 L56 104", 5)}
+    ${bone("M55 67 C70 65 74 76 62 80", 4)}${bone("M55 75 C70 74 73 85 62 88", 4)}${bone("M55 83 C68 83 70 91 62 94", 4)}
+    <path fill="#ec407a" d="M42 64 L72 98 L64 102 L38 70 Z"/>
+    <path class="ns" fill="#ffeb3b" d="M46 69 L68 94 L66 96 L44 71 Z"/>
+    <path fill="#f5f1e6" style="stroke:#2f3440;stroke-width:1.6" d="M45 101 C45 95 66 95 68 101 C68 109 60 113 56 113 C50 113 45 109 45 101 Z"/>
+    ${leg(57, 0)}
+    <path fill="#f5f1e6" style="stroke:#2f3440;stroke-width:2" d="M38 34 C38 18 50 10 60 10 C74 10 82 20 80 36 C80 42 76 46 72 48 L72 52 L52 52 L52 48 C44 46 38 42 38 34 Z"/>
+    <circle class="ns" fill="#f48fb1" cx="60" cy="31" r="9"/><circle class="ns" fill="#81d4fa" cx="73" cy="32" r="7.5"/>
+    <ellipse class="ns" fill="#2f3440" cx="60" cy="31" rx="5" ry="6"/><ellipse class="ns" fill="#2f3440" cx="73" cy="32" rx="3.8" ry="5.5"/>
+    <path class="ns" fill="#e91e63" d="M75 42 C73 38 70 39 70 41 C70 43 73 45 74 46 C75 45 78 43 78 41 C78 39 75 38 75 42 Z" transform="rotate(180 74 42)"/>
+    <path class="ln" style="stroke:#2f3440;stroke-width:1.2" d="M54 50 L76 50 M58 47 L58 53 M63 47 L63 53 M68 47 L68 53 M73 47 L73 53"/>
+    <path class="ln" style="stroke:#26a69a;stroke-width:1.5" d="M44 38 C42 42 44 46 48 45 M46 22 C50 18 56 18 58 21"/>
+    ${flower(44, 16, "#ff9800")}${flower(53, 9, "#e91e63", 7)}${flower(64, 7, "#ffc107")}${flower(74, 10, "#e91e63", 6.5)}${flower(81, 18, "#ff9800", 5.5)}
+    <path class="ns" fill="#43a047" d="M47 8 C44 2 50 0 51 4 Z M70 2 C72 -4 77 -2 75 3 Z"/>
+    ${arm("M58 66 L72 54 L74 34", ["M74 34 L75 22", 75, 15], "#26c6da", -0.15)}
+    ${speechFor(62, -46, "¡Feliz Día de Muertos!", "#ad1457")}
+  </svg>`;
+}
+
+function marigold(x, y, s, delay) {
+  const ring = (r, n, c, size) => Array.from({ length: n }, (_, i) => {
+    const a = (i * 2 * Math.PI) / n;
+    return `<circle fill="${c}" cx="${(Math.cos(a) * r).toFixed(1)}" cy="${(Math.sin(a) * r).toFixed(1)}" r="${size}"/>`;
+  }).join("");
+  return `<g transform="translate(${x} ${y}) scale(${s})"><g class="twirl" style="animation-delay:${delay}s;animation-duration:7s">
+    ${ring(13, 10, "#ff9800", 7)}${ring(7, 8, "#ffb300", 6)}<circle fill="#ffd54f" r="5.5"/>
+  </g></g>`;
+}
+
+function marigoldsSvg() {
+  const petals = [[30, 30, 0], [90, 20, -0.8], [150, 40, -1.6], [200, 24, -0.4], [60, 110, -1.2], [170, 112, -2]]
+    .map(([x, y, d]) => `<g transform="translate(${x} ${y})"><ellipse class="petal" fill="#ffa726" rx="4" ry="6" style="animation-delay:${d}s"/></g>`).join("");
+  return `${svgOpen("marigolds", [0, 0, 220, 150])}
+    ${petals}${marigold(50, 70, 1.2, 0)}${marigold(124, 50, 0.9, -2)}${marigold(180, 92, 1.1, -4)}
+  </svg>`;
+}
+
+/* ---- Diwali ------------------------------------------------------------- */
+
+function diya(x, y, s, delay) {
+  return `<g transform="translate(${x} ${y}) scale(${s})"><g class="bobble" style="animation-delay:${delay}s">
+    <g class="flame" style="animation-delay:${delay}s">
+      <path class="ns" fill="#ff9800" d="M0 -44 C9 -31 11 -22 0 -13 C-11 -22 -9 -31 0 -44 Z"/>
+      <path class="ns" fill="#ffeb3b" d="M0 -37 C5 -29 6 -23 0 -16 C-6 -23 -5 -29 0 -37 Z"/>
+      <ellipse class="ns" fill="#ffffff" cx="0" cy="-20" rx="2" ry="4"/>
+    </g>
+    <path fill="#d84315" d="M-30 -12 C-28 8 22 10 30 -6 L42 -15 C34 -15 30 -12 26 -12 Z"/>
+    <path class="ns" fill="#ffca28" d="M-24 -4 C-10 2 10 2 22 -2 L21 0 C10 4 -10 4 -23 -1 Z"/>
+    <circle class="ns" fill="#ffeb3b" cx="-14" cy="4" r="1.8"/><circle class="ns" fill="#ffeb3b" cx="-2" cy="6" r="1.8"/><circle class="ns" fill="#ffeb3b" cx="10" cy="5" r="1.8"/>
+    <ellipse fill="#8d3a10" cx="-2" cy="-12" rx="27" ry="5"/>
+  </g></g>`;
+}
+
+function diyasSvg() {
+  return `${svgOpen("diyas", [0, 0, 250, 120])}
+    ${sparkle(14, 30, 0.45, "#fff59d", 0)}${sparkle(236, 26, 0.4, "#ffffff", -0.5)}
+    ${diya(42, 84, 1, 0)}${diya(102, 72, 0.9, -0.4)}${diya(160, 86, 1.05, -0.8)}${diya(216, 74, 0.85, -1.2)}
+  </svg>`;
+}
+
+function rangoliSvg() {
+  const petals = (n, d, colors, dot) => Array.from({ length: n }, (_, i) =>
+    `<path fill="${colors[i % colors.length]}" transform="rotate(${(360 / n) * i})" d="${d}"/>` +
+    (dot ? `<circle class="ns" fill="#ffffff" transform="rotate(${(360 / n) * i})" cx="0" cy="${dot}" r="3"/>` : "")).join("");
+  return `${svgOpen("rangoli", [-110, -110, 220, 220])}
+    <g class="bloom"><g class="turn">
+      ${petals(12, "M0 -100 C14 -84 14 -66 0 -56 C-14 -66 -14 -84 0 -100 Z", ["#e91e63", "#ff9800"], -78)}
+      <circle class="ln" style="stroke:#ffeb3b;stroke-width:4" r="54"/>
+      ${petals(8, "M0 -54 C12 -42 12 -30 0 -22 C-12 -30 -12 -42 0 -54 Z", ["#8e24aa", "#29b6f6"], 0)}
+      ${petals(8, "M0 -24 C6 -18 6 -12 0 -8 C-6 -12 -6 -18 0 -24 Z", ["#ffeb3b"], 0)}
+      <circle fill="#43a047" r="12"/><circle class="ns" fill="#ffffff" r="5"/>
+    </g></g>
+  </svg>`;
+}
+
+/* ---- Eid ---------------------------------------------------------------- */
+
+function crescentSvg() {
+  return `${svgOpen("crescent", [0, -46, 170, 186])}
+    ${sparkle(150, 20, 0.5, "#fff9c4", 0)}${sparkle(20, 120, 0.4, "#ffffff", -0.4)}${sparkle(140, 116, 0.35, "#fff9c4", -0.2)}
+    <path fill="#ffd54f" d="M90 12 A52 52 0 1 0 90 112 A62 62 0 0 1 90 12 Z"/>
+    <path fill="#ffd54f" d="M118 44 L122 54 L133 54 L124 61 L127 72 L118 65 L109 72 L112 61 L103 54 L114 54 Z"/>
+    ${speechFor(84, -46, "Eid Mubarak!", "#00695c")}
+  </svg>`;
+}
+
+function fanous(x, y, s, delay, [a, b, c]) {
+  return `<g transform="translate(${x} ${y}) scale(${s})"><g class="swing-lantern" style="animation-delay:${delay}s">
+    <path class="ln" style="stroke:#8d6e63;stroke-width:1.5" d="M0 -62 L0 -50"/>
+    <circle class="ln" style="stroke:#c8a24a;stroke-width:2" cx="0" cy="-47" r="4"/>
+    <path fill="#c8a24a" d="M-3 -38 L0 -44 L3 -38 Z"/>
+    <path fill="#c8a24a" d="M-14 -24 C-14 -38 14 -38 14 -24 Z"/>
+    <rect fill="#b08a2e" x="-18" y="-26" width="36" height="5"/>
+    <path fill="${b}" d="M-18 -21 L-8 -21 L-8 14 L-18 10 Z"/>
+    <path fill="${a}" d="M-8 -21 L8 -21 L8 14 L-8 14 Z"/>
+    <path fill="${c}" d="M8 -21 L18 -21 L18 10 L8 14 Z"/>
+    <ellipse class="ns lamp" fill="#fff59d" opacity="0.75" cx="0" cy="-3" rx="5" ry="9"/>
+    <path class="ln" style="stroke:#c8a24a;stroke-width:2" d="M-8 -21 L-8 14 M8 -21 L8 14 M-18 -4 L18 -4"/>
+    <path fill="#c8a24a" d="M-18 10 L-8 14 L8 14 L18 10 L10 24 L-10 24 Z"/>
+    <path fill="#c8a24a" d="M-4 24 L0 33 L4 24 Z"/>
+  </g></g>`;
+}
+
+function fanousSvg() {
+  return `${svgOpen("fanous", [0, 0, 200, 170])}
+    ${fanous(48, 82, 1.25, 0, ["#ef5350", "#c62828", "#e57373"])}
+    ${fanous(116, 104, 1, -0.7, ["#26a69a", "#00796b", "#4db6ac"])}
+    ${fanous(170, 72, 0.85, -1.3, ["#42a5f5", "#1565c0", "#90caf9"])}
+  </svg>`;
+}
+
+/* ---- Birthdays ---------------------------------------------------------- */
+
+function balloonsSvg(ctx = {}) {
+  const balloons = [[50, 42, "#e53935"], [88, 24, "#fdd835"], [126, 42, "#1e88e5"], [68, 74, "#43a047"], [108, 74, "#ec407a"]];
+  return `${svgOpen("balloons", [0, -46, 180, 226])}
+    ${balloons.map(([x, y, c], i) => `<path class="ln" style="stroke:#9e9e9e;stroke-width:1.2" d="M${x} ${y + 26} C${x + (90 - x) * 0.3} ${y + 60} ${90 + (x - 90) * 0.2} 140 90 172"/>`).join("")}
+    ${balloons.map(([x, y, c], i) => `<g class="bobble" style="animation-delay:${-i * 0.3}s">
+      <ellipse fill="${c}" cx="${x}" cy="${y}" rx="20" ry="24"/>
+      <path fill="${c}" d="M${x - 4} ${y + 26} L${x + 4} ${y + 26} L${x} ${y + 21} Z"/>
+      <ellipse class="ns" fill="#ffffff" opacity="0.5" cx="${x - 7}" cy="${y - 9}" rx="5" ry="8" transform="rotate(-20 ${x - 7} ${y - 9})"/></g>`).join("")}
+    <path fill="#ab47bc" d="M90 172 L78 166 L80 178 Z M90 172 L102 166 L100 178 Z"/>
+    ${speechFor(90, -46, ctx.text || "Happy birthday!", "#c2185b")}
+  </svg>`;
+}
+
+function cakeSvg(ctx = {}) {
+  const leg = (x, offset) => `<g class="leg swing" style="${delayed(offset)}">
+      <path class="ln" style="stroke:#6d4c41;stroke-width:3.5" d="M${x} 120 L${x} 138"/>
+      <path fill="#7e57c2" d="M${x - 3} 136 L${x + 10} 136 C${x + 14} 136 ${x + 14} 143 ${x + 10} 143 L${x - 3} 143 Z"/></g>`;
+  const candle = (x, c, d) => `<rect fill="${c}" x="${x}" y="30" width="7" height="22" rx="1.5"/>
+    <g class="flame" style="animation-delay:${d}s"><path class="ns" fill="#ff9800" d="M${x + 3.5} 14 C${x + 9} 22 ${x + 9} 26 ${x + 3.5} 30 C${x - 2} 26 ${x - 2} 22 ${x + 3.5} 14 Z"/>
+    <path class="ns" fill="#ffeb3b" d="M${x + 3.5} 19 C${x + 6} 23 ${x + 6} 26 ${x + 3.5} 28 C${x + 1} 26 ${x + 1} 23 ${x + 3.5} 19 Z"/></g>`;
+  return `${svgOpen("cake", [0, -50, 130, 196])}
+    ${leg(46, 0.5)}${leg(76, 0)}
+    <path fill="#f8bbd0" d="M14 80 L116 80 L116 116 C116 120 112 122 108 122 L22 122 C18 122 14 120 14 116 Z"/>
+    <path class="ns" fill="#ffffff" d="M14 80 L116 80 L116 88 C110 94 106 86 100 92 C94 98 90 86 84 92 C78 98 72 86 66 93 C60 99 54 86 48 92 C42 98 36 86 30 92 C24 97 20 88 14 90 Z"/>
+    <path fill="#fff3e0" d="M32 52 L98 52 L98 80 L32 80 Z"/>
+    <path class="ns" fill="#f48fb1" d="M32 52 L98 52 L98 58 C92 64 88 56 82 62 C76 68 70 56 64 63 C58 69 52 56 46 62 C40 67 36 58 32 60 Z"/>
+    <g class="ns">
+      <rect fill="#42a5f5" x="24" y="100" width="6" height="2.5" rx="1" transform="rotate(30 27 101)"/>
+      <rect fill="#ffeb3b" x="98" y="104" width="6" height="2.5" rx="1" transform="rotate(-25 101 105)"/>
+      <rect fill="#66bb6a" x="40" y="68" width="6" height="2.5" rx="1" transform="rotate(-20 43 69)"/>
+      <rect fill="#ab47bc" x="84" y="70" width="6" height="2.5" rx="1" transform="rotate(35 87 71)"/>
+    </g>
+    <circle class="ns" fill="#3e2723" cx="54" cy="102" r="3"/><circle class="ns" fill="#3e2723" cx="76" cy="102" r="3"/>
+    <path class="ln" style="stroke:#3e2723;stroke-width:2.2" d="M58 110 C62 115 68 115 72 110"/>
+    <circle class="ns" fill="#f06292" cx="48" cy="109" r="4"/><circle class="ns" fill="#f06292" cx="82" cy="109" r="4"/>
+    ${candle(42, "#42a5f5", 0)}${candle(61, "#ffeb3b", -0.15)}${candle(80, "#66bb6a", -0.3)}
+    ${speechFor(65, -50, ctx.text || "Happy birthday!", "#c2185b")}
+  </svg>`;
+}
+
+const CELEBRATION_CSS = `
+.flame { transform-box: fill-box; transform-origin: 50% 100%; animation: flame 0.35s ease-in-out infinite alternate; }
+.bobble { animation: bobble 1.6s ease-in-out infinite; }
+.swing-lantern { transform-box: fill-box; transform-origin: 50% 0; animation: lantern 1.8s ease-in-out infinite; }
+.twirl { transform-box: fill-box; transform-origin: center; animation: twirl 3s linear infinite; }
+.beat { transform-box: fill-box; transform-origin: center; animation: beat 0.9s ease-in-out infinite; }
+.seg { animation: undulate 1.1s ease-in-out infinite; }
+.rocket { opacity: 0; animation-name: rocket; animation-timing-function: ease-out; animation-iteration-count: 1; }
+.burst { transform-box: fill-box; transform-origin: center; opacity: 0; animation-name: burst; animation-timing-function: ease-out; animation-iteration-count: 1; }
+.prop { transform-box: fill-box; transform-origin: center; animation: prop 0.08s linear infinite alternate; }
+.banner { transform-box: fill-box; transform-origin: 100% 50%; animation: banner 0.7s ease-in-out infinite; }
+.jaw2 { transform-box: fill-box; transform-origin: 0 0; animation: chomp 0.3s ease-in-out infinite alternate; }
+.lionhead { transform-box: fill-box; transform-origin: 30% 90%; animation: swing-small calc(var(--cycle) * 2) ease-in-out infinite; }
+.shake { transform-box: fill-box; transform-origin: 50% 100%; animation: shake 0.3s ease-in-out infinite alternate; }
+.petal { animation: petal 2.4s linear infinite; }
+.bloom { transform-box: fill-box; transform-origin: center; animation: bloom calc(var(--dur) * 0.35) ease-out both; }
+.turn { transform-box: fill-box; transform-origin: center; animation: twirl 24s linear infinite; }
+.cwing3 { transform-box: fill-box; transform-origin: 90% 90%; animation: cupidflap var(--cycle) ease-in-out infinite; }
+.cwing3.far { animation-delay: calc(var(--cycle) * -0.1); }
+.bwing { transform-box: fill-box; transform-origin: 20% 100%; animation: birdflap 0.3s ease-in-out infinite alternate; }
+.carry { transform-box: fill-box; transform-origin: 0 50%; animation: swing-tiny var(--cycle) ease-in-out infinite; }
+.shoot { animation: shoot 0.6s ease-in var(--event-at) 1 both; }
+.lamp { animation: flicker 0.5s ease-in-out infinite alternate; }
+.whisker { transform-box: fill-box; transform-origin: 0 50%; animation: swing-tiny 0.9s ease-in-out infinite; }
+@keyframes flame { from { transform: scale(1, 1); opacity: 1; } to { transform: scale(0.86, 1.14); opacity: 0.85; } }
+@keyframes bobble { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes lantern { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes twirl { to { transform: rotate(360deg); } }
+@keyframes beat { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.16); } 60% { transform: scale(0.96); } }
+@keyframes undulate { 0%, 100% { transform: translateY(-12px); } 50% { transform: translateY(12px); } }
+@keyframes rocket { 0% { opacity: 1; transform: translateY(var(--rise)); } 100% { opacity: 1; transform: translateY(0); } }
+@keyframes burst { 0% { opacity: 1; transform: scale(0.1); } 55% { opacity: 1; } 100% { opacity: 0; transform: scale(1.2); } }
+@keyframes prop { from { transform: scaleY(1); } to { transform: scaleY(0.15); } }
+@keyframes banner { 0%, 100% { transform: skewY(0deg); } 50% { transform: skewY(-3deg) scaleX(1.02); } }
+@keyframes chomp { from { transform: rotate(0deg); } to { transform: rotate(8deg); } }
+@keyframes shake { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+@keyframes petal { 0% { transform: translate(0, -8px) rotate(0deg); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(-14px, 30px) rotate(200deg); opacity: 0; } }
+@keyframes bloom { from { transform: scale(0.2) rotate(-40deg); } to { transform: scale(1) rotate(0deg); } }
+@keyframes cupidflap { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-30deg); } }
+@keyframes birdflap { from { transform: rotate(10deg) scaleY(1); } to { transform: rotate(-20deg) scaleY(0.4); } }
+@keyframes shoot { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(220px); opacity: 0; } }
+`;
+
 const DRAGON_CSS = `
 .dragon path { stroke: var(--line); stroke-width: 1.1; stroke-linejoin: round; }
 .dragon .bones { fill: none; stroke-width: 1.4; stroke-linecap: round; opacity: 0.9; }
@@ -1185,7 +2059,8 @@ const DRAGON_CSS = `
 /* ------------------------------------------------------------------------ */
 /* Cast                                                                     */
 /* ------------------------------------------------------------------------ */
-// motion: fly | float travel through the air, walk | hop | surf along the bottom.
+// motion: fly | float travel through the air, walk | hop | surf along the bottom,
+// show appears in one spot.
 // scale: width relative to the size option. vb: the SVG viewBox.
 // theme: one theme or a list of themes. weight: how often it is picked within
 // its theme. flip: false keeps front-facing art (and its text) unmirrored
@@ -1295,6 +2170,171 @@ const ACTORS = {
     scale: 0.32, vb: [0, 0, 100, 100], weight: 2, cycle: 0.3,
     line: "#c99400", css: EASTER_CSS, svg: chickSvg,
   },
+  // Weather: who appears depends on the conditions right now (weatherCast).
+  sun: {
+    theme: "weather", name: "Sun in sunnies", motion: "float", bob: "float", flip: false,
+    scale: 0.5, vb: [-70, -70, 140, 140], weight: 1, cycle: 0.6, tilt: 0, waves: [0.6, 1.2],
+    line: "#e65100", css: WEATHER_CSS, svg: sunSvg,
+  },
+  cloud: {
+    theme: "weather", name: "Happy cloud", motion: "float", bob: "float", flip: false,
+    scale: 0.6, vb: [0, 0, 160, 100], weight: 1, cycle: 0.7, tilt: 3,
+    line: "#b0bec5", css: WEATHER_CSS, svg: () => cloudSvg("fluffy"),
+  },
+  raincloud: {
+    theme: "weather", name: "Rain cloud", motion: "float", bob: "float", flip: false,
+    scale: 0.6, vb: [0, 0, 160, 140], weight: 1, cycle: 0.7, tilt: 3,
+    line: "#78909c", css: WEATHER_CSS, svg: () => cloudSvg("rain"),
+  },
+  stormcloud: {
+    theme: "weather", name: "Storm cloud", motion: "float", bob: "float", flip: false,
+    scale: 0.6, vb: [0, 0, 160, 140], weight: 1, cycle: 0.7, tilt: 3,
+    line: "#37474f", css: WEATHER_CSS, svg: () => cloudSvg("storm"),
+  },
+  duck: {
+    theme: "weather", name: "Duck with an umbrella", motion: "walk",
+    scale: 0.48, vb: [0, -30, 120, 166], weight: 1, cycle: 0.3,
+    line: "#5d4037", css: WEATHER_CSS, svg: duckSvg,
+  },
+  kite: {
+    theme: "weather", name: "Kite", motion: "fly", bob: "gentle",
+    scale: 0.8, vb: [-30, 0, 230, 190], weight: 1, cycle: 0.6, tilt: 14, waves: [1.5, 2.5],
+    line: "#5d4037", css: WEATHER_CSS, svg: kiteSvg,
+  },
+  snowman: {
+    theme: "weather", name: "Snowman", motion: "hop",
+    scale: 0.42, vb: [0, -24, 100, 156], weight: 1, cycle: 0.55,
+    line: "#90a4ae", css: WEATHER_CSS, svg: snowmanSvg,
+  },
+  penguin: {
+    theme: "weather", name: "Penguin", motion: "walk", flip: false,
+    scale: 0.4, vb: [0, -44, 100, 150], weight: 1, cycle: 0.3,
+    line: "#263238", css: WEATHER_CSS, event: SAY, svg: penguinSvg,
+  },
+  owl: {
+    theme: "weather", name: "Night owl", motion: "fly", bob: "fly", flip: false,
+    scale: 0.6, vb: [0, -20, 160, 140], weight: 1, cycle: 0.4, tilt: 10,
+    line: "#4e342e", css: WEATHER_CSS, svg: owlSvg,
+  },
+  icecream: {
+    theme: "weather", name: "Melting ice cream", motion: "walk",
+    scale: 0.4, vb: [0, -44, 100, 182], weight: 1, cycle: 0.3,
+    line: "#6d4c41", css: WEATHER_CSS, event: SAY, svg: icecreamSvg,
+  },
+
+  fireworks: {
+    theme: ["newyear", "diwali"], name: "Fireworks", motion: "show", flip: false,
+    scale: 1.2, maxWidth: 0.6, vb: [0, 0, 300, 260], weight: 3, cycle: 1,
+    line: "none", css: CELEBRATION_CSS, svg: fireworksSvg,
+  },
+  bannerplane: {
+    theme: ["newyear", "birthdays"], name: "Plane with a banner", motion: "fly", bob: "gentle",
+    scale: 1.6, maxWidth: 0.7, vb: [0, 0, 460, 110], weight: 2, cycle: 0.5, tilt: 6,
+    line: "#7f1d1d", css: CELEBRATION_CSS, svg: bannerPlaneSvg,
+  },
+  partydragon: {
+    ...dragonActor("shadow"), theme: ["newyear", "birthdays"],
+    name: "Dragon in a party hat", weight: 2, event: SAY,
+    svg: (ctx) => dragonSvg(DRAGONS.shadow, { partyHat: true, blast: false, say: ctx.text }),
+  },
+
+  liondance: {
+    theme: "lunarnewyear", name: "Lion dance", motion: "walk",
+    scale: 0.8, vb: [0, -50, 216, 186], weight: 3, cycle: 0.36,
+    line: "#7f1d1d", css: CELEBRATION_CSS, event: SAY, svg: lionDanceSvg,
+  },
+  paradedragon: {
+    theme: "lunarnewyear", name: "Parade dragon", motion: "fly", bob: "none",
+    scale: 1.7, maxWidth: 0.75, vb: [-10, -40, 460, 170], weight: 3, cycle: 0.5, tilt: 8, waves: [1, 1.8],
+    line: "#7f1d1d", css: CELEBRATION_CSS, svg: paradeDragonSvg,
+  },
+  lanterns: {
+    theme: "lunarnewyear", name: "Red lanterns", motion: "float", bob: "float", flip: false,
+    scale: 0.9, vb: [0, 0, 240, 180], weight: 2, cycle: 0.6, tilt: 3,
+    line: "#7f1d1d", glow: "rgba(255, 120, 80, 0.55)", css: CELEBRATION_CSS, svg: lanternsSvg,
+  },
+
+  cupid: {
+    theme: "valentines", name: "Cupid", motion: "fly", bob: "fly",
+    scale: 0.75, vb: [0, -10, 214, 150], weight: 3, cycle: 0.35, tilt: 14,
+    line: "#8d4b3a", css: CELEBRATION_CSS, svg: cupidSvg,
+  },
+  hearts: {
+    theme: "valentines", name: "Floating hearts", motion: "float", bob: "float", flip: false,
+    scale: 0.8, vb: [-10, -10, 236, 160], weight: 2, cycle: 0.6, tilt: 3,
+    line: "#ad1457", css: CELEBRATION_CSS, svg: heartsSvg,
+  },
+  lovebirds: {
+    theme: "valentines", name: "Lovebirds", motion: "fly", bob: "gentle",
+    scale: 0.8, vb: [0, 0, 226, 160], weight: 2, cycle: 0.5, tilt: 10,
+    line: "#6d4c41", css: CELEBRATION_CSS, svg: lovebirdsSvg,
+  },
+
+  leprechaun: {
+    theme: "stpatricks", name: "Leprechaun", motion: "walk",
+    scale: 0.44, vb: [0, -44, 116, 184], weight: 3, cycle: 0.34,
+    line: "#1b3a1d", css: CELEBRATION_CSS, event: SAY, svg: leprechaunSvg,
+  },
+  shamrocks: {
+    theme: "stpatricks", name: "Shamrocks", motion: "fly", bob: "gentle", flip: false,
+    scale: 0.8, vb: [0, 0, 220, 140], weight: 2, cycle: 0.6, tilt: 6, waves: [1.2, 2.2],
+    line: "#1b5e20", css: CELEBRATION_CSS, svg: shamrocksSvg,
+  },
+  rainbowgold: {
+    theme: "stpatricks", name: "Rainbow and pot of gold", motion: "show", flip: false,
+    scale: 1.1, maxWidth: 0.55, vb: [0, 20, 320, 166], weight: 2, cycle: 1,
+    line: "#90a4ae", css: CELEBRATION_CSS, svg: rainbowGoldSvg,
+  },
+
+  calavera: {
+    theme: "diadelosmuertos", name: "Dancing calavera", motion: "walk",
+    scale: 0.52, vb: [0, -46, 124, 232], weight: 3, cycle: 0.42,
+    line: "none", css: CELEBRATION_CSS, event: SAY, svg: calaveraSvg,
+  },
+  monarchs: {
+    theme: "diadelosmuertos", name: "Monarch butterflies", motion: "fly", bob: "gentle",
+    scale: 0.85, vb: [0, 0, 220, 140], weight: 2, cycle: 0.5, tilt: 10, waves: [2, 3.5],
+    line: "#1b1b1b", css: EASTER_CSS, svg: monarchsSvg,
+  },
+  marigolds: {
+    theme: "diadelosmuertos", name: "Marigolds", motion: "float", bob: "float", flip: false,
+    scale: 0.8, vb: [0, 0, 220, 150], weight: 2, cycle: 0.6, tilt: 3,
+    line: "#e65100", css: CELEBRATION_CSS, svg: marigoldsSvg,
+  },
+
+  diyas: {
+    theme: "diwali", name: "Diyas (oil lamps)", motion: "float", bob: "gentle", flip: false,
+    scale: 0.9, vb: [0, 0, 250, 120], weight: 3, cycle: 0.6, tilt: 3,
+    line: "#5d1f08", glow: "rgba(255, 170, 60, 0.6)", css: CELEBRATION_CSS, svg: diyasSvg,
+  },
+  rangoli: {
+    theme: "diwali", name: "Rangoli", motion: "show", flip: false,
+    scale: 0.9, vb: [-110, -110, 220, 220], weight: 2, cycle: 1,
+    line: "none", css: CELEBRATION_CSS, svg: rangoliSvg,
+  },
+
+  crescent: {
+    theme: "eid", name: "Crescent moon", motion: "float", bob: "float", flip: false,
+    scale: 0.7, vb: [0, -46, 170, 186], weight: 2, cycle: 0.6, tilt: 3,
+    line: "#f9a825", glow: "rgba(255, 213, 79, 0.6)", css: CELEBRATION_CSS, event: SAY, svg: crescentSvg,
+  },
+  fanous: {
+    theme: "eid", name: "Fanous lanterns", motion: "float", bob: "float", flip: false,
+    scale: 0.8, vb: [0, 0, 200, 170], weight: 2, cycle: 0.6, tilt: 3,
+    line: "#6d5317", glow: "rgba(255, 220, 120, 0.5)", css: CELEBRATION_CSS, svg: fanousSvg,
+  },
+
+  balloons: {
+    theme: "birthdays", name: "Balloons", motion: "float", bob: "gentle", flip: false,
+    scale: 0.7, vb: [0, -46, 180, 226], weight: 3, cycle: 0.6, tilt: 3,
+    line: "rgba(0, 0, 0, 0.25)", css: CELEBRATION_CSS, event: SAY, svg: balloonsSvg,
+  },
+  cake: {
+    theme: "birthdays", name: "Birthday cake", motion: "walk", flip: false,
+    scale: 0.5, vb: [0, -50, 130, 196], weight: 3, cycle: 0.32,
+    line: "#8d5a6a", css: CELEBRATION_CSS, event: SAY, svg: cakeSvg,
+  },
+
   // Belongs to no theme: it turns up by chance (the unicorn option) in all of them.
   unicorn: {
     theme: [], name: "Unicorn", motion: "fly", bob: "fly",
@@ -1335,6 +2375,105 @@ const ACTORS = {
     line: "#3e2723", css: EASTER_CSS, svg: butterfliesSvg,
   },
 };
+
+/* ------------------------------------------------------------------------ */
+/* Weather                                                                  */
+/* ------------------------------------------------------------------------ */
+// Reads a weather entity straight from the dashboard's live connection to
+// Home Assistant (the same data your cards use), so no extra setup or
+// internet access is needed. Standard weather conditions are used as they
+// are; anything else, such as a forecast text sensor, is matched on words.
+
+const WEATHER_CAST = {
+  sunny: ["sun"],
+  "clear-night": ["owl"],
+  partlycloudy: ["sun", "cloud"],
+  cloudy: ["cloud"],
+  fog: ["cloud"],
+  exceptional: ["cloud"],
+  rainy: ["duck", "raincloud"],
+  pouring: ["duck", "raincloud"],
+  lightning: ["stormcloud"],
+  "lightning-rainy": ["stormcloud", "duck"],
+  snowy: ["snowman", "penguin"],
+  "snowy-rainy": ["snowman", "penguin"],
+  hail: ["snowman", "penguin"],
+  windy: ["kite"],
+  "windy-variant": ["kite", "cloud"],
+};
+
+const WEATHER_WORDS = [
+  [/thunder|storm|lightning|cyclone/, "lightning-rainy"],
+  [/snow|sleet|hail|frost|blizzard/, "snowy"],
+  [/rain|shower|drizzle|pour/, "rainy"],
+  [/wind|gust|gale|breez/, "windy"],
+  [/fog|mist|haz|smoke|dust/, "fog"],
+  [/partly|mostly.sunny|few.cloud|scattered/, "partlycloudy"],
+  [/cloud|overcast/, "cloudy"],
+  [/sun|clear|fine/, "sunny"],
+];
+
+const HOT_C = 35;
+const COLD_C = 3;
+
+function weatherCondition(state) {
+  const s = String(state ?? "").trim().toLowerCase();
+  if (WEATHER_CAST[s]) return s;
+  if (!s || s === "unknown" || s === "unavailable") return null;
+  return WEATHER_WORDS.find(([words]) => words.test(s))?.[1] ?? null;
+}
+
+// Prefer the default home forecast, then any daily weather entity.
+function findWeatherEntity(states) {
+  const ids = Object.keys(states).filter((id) => id.startsWith("weather.")).sort();
+  if (ids.includes("weather.forecast_home")) return "weather.forecast_home";
+  return ids.find((id) => !id.endsWith("_hourly")) ?? ids[0] ?? null;
+}
+
+// setting: an entity id, "auto" (find one), or a fixed condition for testing.
+function readWeather(setting) {
+  const states = document.querySelector("home-assistant")?.hass?.states ?? {};
+  const value = String(setting || "auto").trim();
+  const fixed = value !== "auto" && !value.includes(".");
+  const entity = fixed ? null : value === "auto" ? findWeatherEntity(states) : value;
+  const state = entity ? states[entity] : undefined;
+  let condition = weatherCondition(fixed ? value : state?.state);
+
+  // Temperature from the entity itself, or from a temperature sensor's state.
+  let temperature = Number.parseFloat(state?.attributes?.temperature ?? (entity?.startsWith("sensor.") ? state?.state : NaN));
+  if (!Number.isFinite(temperature)) temperature = null;
+  const unitText = String(state?.attributes?.temperature_unit ?? state?.attributes?.unit_of_measurement ?? "°C");
+  const fahrenheit = /F/i.test(unitText);
+  const celsius = temperature === null ? null : fahrenheit ? ((temperature - 32) * 5) / 9 : temperature;
+
+  // Some integrations report the day's forecast around the clock, so ask the
+  // sun (or the clock) whether it is night.
+  const sun = states["sun.sun"]?.state;
+  const hour = new Date().getHours();
+  const night = sun ? sun === "below_horizon" : hour < 6 || hour >= 19;
+  if (condition === "sunny" && night) condition = "clear-night";
+  if (condition === "clear-night" && !night) condition = "sunny";
+
+  return {
+    entity,
+    found: Boolean(fixed || state),
+    condition,
+    temperature,
+    celsius,
+    night,
+    text: temperature === null ? "" : `${Math.round(temperature)}°${fahrenheit ? "F" : ""}`,
+  };
+}
+
+// Who shows up for this weather. Duplicates make a visitor more likely.
+function weatherCast(weather) {
+  if (!weather.condition) return null;
+  let cast = [...WEATHER_CAST[weather.condition]];
+  if (weather.condition === "partlycloudy" && weather.night) cast = ["owl", "cloud"];
+  if (weather.celsius !== null && weather.celsius >= HOT_C) cast.push("icecream", "icecream");
+  if (weather.celsius !== null && weather.celsius <= COLD_C && !cast.includes("penguin")) cast.push("penguin");
+  return cast;
+}
 
 /* ------------------------------------------------------------------------ */
 /* Flight                                                                   */
@@ -1439,37 +2578,90 @@ function groundPath(vw, vh, w, h, ltr) {
   ];
 }
 
-function activeTheme(cfg, now = new Date()) {
-  return cfg.theme === "auto" ? seasonFor(now, inAustralia()) : cfg.theme;
+// Shows (fireworks, rangoli) appear in one spot, fading in and out.
+function showPath(vw, vh, w, h) {
+  const at = `translate(${rand(0.04, 0.96) * Math.max(0, vw - w)}px, ${rand(0.04, 0.45) * Math.max(0, vh - h)}px)`;
+  return [
+    { transform: at, opacity: 0 },
+    { transform: at, opacity: 1, offset: 0.08 },
+    { transform: at, opacity: 1, offset: 0.85 },
+    { transform: at, opacity: 0 },
+  ];
 }
+
+function activeTheme(cfg, now = new Date()) {
+  return cfg.theme === "auto" ? holidayOn(now, cfg) ?? "dragons" : cfg.theme;
+}
+
+const warned = new Set();
+const warnOnce = (message) => {
+  if (warned.has(message)) return;
+  warned.add(message);
+  console.info(`Dragon Flyby: ${message}`);
+};
 
 function createFlyby(cfg) {
   let active = null;
   let lastKey = null;
 
   // request: a character key, a theme name, or nothing for the current theme.
-  function pickActor(request) {
-    if (request && ACTORS[request]) return request;
-    // Any visit, in any theme, might be the rare unicorn instead.
-    if (Math.random() * 100 < cfg.unicorn) return "unicorn";
-    const theme = THEMES.includes(request) ? request : activeTheme(cfg);
-    if (theme === "dragons" && cfg.dragon !== "random") return cfg.dragon;
-    let cast = Object.keys(ACTORS).filter((k) => [].concat(ACTORS[k].theme).includes(theme));
-    if (cast.length > 1) cast = cast.filter((k) => k !== lastKey);
-    const total = cast.reduce((sum, k) => sum + ACTORS[k].weight, 0);
-    let roll = Math.random() * total;
-    for (const k of cast) {
-      roll -= ACTORS[k].weight;
-      if (roll < 0) return k;
+  // Returns the visitor and the theme it is visiting for.
+  function pickActor(request, now) {
+    if (request && ACTORS[request]) {
+      // A visitor shared by several themes visits for whichever is on today.
+      const themes = [].concat(ACTORS[request].theme);
+      const current = activeTheme(cfg, now);
+      const birthday = birthdaysOn(now, cfg.birthdays).length > 0 && themes.includes("birthdays");
+      return { key: request, theme: themes.includes(current) ? current : birthday ? "birthdays" : themes[0] || current };
     }
-    return cast[cast.length - 1];
+    const asked = THEMES.includes(request);
+    let theme = asked ? request : activeTheme(cfg, now);
+    // Any visit, in any theme, might be the rare unicorn instead.
+    if (Math.random() * 100 < cfg.unicorn) return { key: "unicorn", theme };
+    // On someone's birthday, birthday visitors join whatever theme is set.
+    if (!asked && theme !== "birthdays" && cfg.holidays.includes("birthdays")
+      && birthdaysOn(now, cfg.birthdays).length && Math.random() < 0.5) theme = "birthdays";
+
+    let cast = null;
+    if (theme === "weather") {
+      const weather = readWeather(cfg.weather);
+      cast = weatherCast(weather);
+      if (!cast) {
+        warnOnce(weather.found
+          ? `can't read the weather from ${weather.entity}, showing dragons instead.`
+          : `no weather entity found${weather.entity ? ` (${weather.entity})` : ""}, showing dragons instead.`);
+        theme = "dragons";
+      }
+    }
+    if (theme === "dragons" && cfg.dragon !== "random") return { key: cfg.dragon, theme };
+    cast ??= Object.keys(ACTORS).filter((k) => [].concat(ACTORS[k].theme).includes(theme));
+    const fresh = cast.filter((k) => k !== lastKey);
+    const choices = fresh.length ? fresh : cast;
+    const total = choices.reduce((sum, k) => sum + ACTORS[k].weight, 0);
+    let roll = Math.random() * total;
+    for (const k of choices) {
+      roll -= ACTORS[k].weight;
+      if (roll < 0) return { key: k, theme };
+    }
+    return { key: choices[choices.length - 1], theme };
   }
 
   function fly(request) {
     if (active || !document.body) return false;
-    const key = pickActor(request);
+    const now = new Date();
+    const { key, theme } = pickActor(request, now);
     const actor = ACTORS[key];
     lastKey = key;
+
+    // Words some visitors say or carry.
+    const newYear = now.getMonth() >= 6 ? now.getFullYear() + 1 : now.getFullYear();
+    const ctx = {
+      theme,
+      duration: cfg.duration,
+      text: theme === "newyear" ? "Happy New Year!" : birthdayMessage(now, cfg.birthdays),
+      banner: theme === "birthdays" ? birthdayMessage(now, cfg.birthdays) : `Happy New Year ${newYear}!`,
+      temperature: readWeather(cfg.weather).text,
+    };
 
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -1493,19 +2685,21 @@ function createFlyby(cfg) {
     const host = document.createElement("dragon-flyby-overlay");
     host.setAttribute("aria-hidden", "true");
     host.dataset.character = key;
+    host.dataset.theme = theme;
     host.style.cssText =
       "position:fixed;inset:0;z-index:2147483647;pointer-events:none;" +
       "overflow:hidden;contain:strict;display:block;";
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<style>${COMMON_CSS}${actor.css || ""}</style>
       <div class="flight"><div class="bob bob-${bob}"><div class="facing ${mirror ? "rtl" : ""}">
-        ${actor.svg()}
+        ${actor.svg(ctx)}
       </div></div></div>`;
     const flight = root.querySelector(".flight");
     const vars = {
       "--w": `${w}px`,
       "--h": `${h}px`,
       "--cycle": `${cycle.toFixed(3)}s`,
+      "--dur": `${cfg.duration}s`,
       "--line": actor.line,
       "--event-at": `${(cfg.duration * 0.42).toFixed(2)}s`,
       "--event-len": `${Math.min(event.max, cfg.duration * event.share).toFixed(2)}s`,
@@ -1515,7 +2709,8 @@ function createFlyby(cfg) {
 
     document.body.appendChild(host);
 
-    const path = onGround ? groundPath(vw, vh, w, h, ltr) : flightPath(vw, vh, w, h, ltr, actor);
+    const path = actor.motion === "show" ? showPath(vw, vh, w, h)
+      : onGround ? groundPath(vw, vh, w, h, ltr) : flightPath(vw, vh, w, h, ltr, actor);
     const animation = flight.animate(path, { duration: durationMs, easing: "linear", fill: "forwards" });
 
     const done = () => {
@@ -1595,6 +2790,8 @@ function start() {
     characters: Object.keys(ACTORS),
     dragons: Object.keys(DRAGONS),
     theme: () => activeTheme(cfg),
+    holiday: () => holidayOn(new Date(), cfg),
+    weather: () => readWeather(cfg.weather),
     fly: (request) => flyby.fly(request),
     stop: () => {
       clearInterval(timer);

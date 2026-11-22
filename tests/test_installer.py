@@ -12,6 +12,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from websockets.sync.server import serve
 
@@ -202,11 +203,46 @@ class InstallerTest(unittest.TestCase):
         self.assertIn("dragon=ember", self.ha.resources[0]["url"])
         self.assertIn("size=extralarge", self.ha.resources[0]["url"])
 
+    def test_weather_holidays_and_birthdays_are_passed(self) -> None:
+        self.run_with(
+            theme="weather",
+            weather_entity=" weather.melbourne ",
+            auto_holidays=["birthdays", "diwali", "nonsense"],
+            birthdays=[
+                {"name": "Mia", "day": 12, "month": 3, "year": 2019},
+                {"name": "Sam", "day": 4, "month": 11},
+                {"name": "", "day": 1, "month": 1},
+                {"name": "Bad date", "day": 40, "month": 1},
+            ],
+        )
+        query = parse_qs(urlsplit(self.ha.resources[0]["url"]).query)
+        self.assertEqual(query["theme"], ["weather"])
+        self.assertEqual(query["weather"], ["weather.melbourne"])
+        self.assertEqual(query["holidays"], ["birthdays,diwali"])
+        self.assertEqual(json.loads(query["birthdays"][0]), [
+            {"name": "Mia", "day": 12, "month": 3, "year": 2019},
+            {"name": "Sam", "day": 4, "month": 11},
+        ])
+
+    def test_defaults_use_auto_weather_all_holidays_and_no_birthdays(self) -> None:
+        self.run_with()
+        query = parse_qs(urlsplit(self.ha.resources[0]["url"]).query, keep_blank_values=True)
+        self.assertEqual(query["weather"], ["auto"])
+        self.assertEqual(query["holidays"], [",".join(install.HOLIDAYS)])
+        self.assertNotIn("birthdays", query)
+        self.run_with(auto_holidays=[], weather_entity="")
+        query = parse_qs(urlsplit(self.ha.resources[0]["url"]).query, keep_blank_values=True)
+        self.assertEqual(query["holidays"], [""])
+        self.assertEqual(query["weather"], ["auto"])
+
     def test_addon_schema_matches_installer_defaults(self) -> None:
         text = (ADDON / "config.yaml").read_text()
         self.assertIn("  dragon: list(random|shadow|spike|ember|moon)?\n", text)
+        self.assertIn("  birthdays: []\n", text)
+        for holiday in install.HOLIDAYS:
+            self.assertIn(f"    - {holiday}\n", text)
         for key, value in install.DEFAULTS.items():
-            if key == "dragon":  # optional, so it has no default in config.yaml
+            if key == "dragon" or isinstance(value, list):  # optional, or checked above
                 continue
             expected = str(value).lower() if isinstance(value, bool) else str(value)
             self.assertIn(f"  {key}: {expected}\n", text)
